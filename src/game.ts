@@ -148,6 +148,32 @@ export function openingFacing(maze: Maze, from: Vec, toward?: Vec): Dir {
   return best;
 }
 
+/**
+ * Where to drop the player: the cell you can see furthest from.
+ *
+ * Cell (0,0) is a corner, and a corner of a generated maze is nearly always a
+ * stub with a wall a step away. The rule that the opening screen has to invite
+ * the first move applies to every level, not just the authored one, and the
+ * cheapest way to honour it is to start where there is something to look at.
+ */
+export function bestStart(maze: Maze): Vec {
+  let best: Vec = { x: 0, y: 0 };
+  let bestView = -1;
+  for (let y = 0; y < maze.height; y += 1) {
+    for (let x = 0; x < maze.width; x += 1) {
+      let view = 0;
+      for (const dir of DIRECTIONS) {
+        view = Math.max(view, corridorLength(maze, { x, y }, dir));
+      }
+      if (view > bestView) {
+        bestView = view;
+        best = { x, y };
+      }
+    }
+  }
+  return best;
+}
+
 function farthestFrom(maze: Maze, from: Vec): Vec {
   const dist = distancesFrom(maze, from);
   let best = from;
@@ -201,7 +227,7 @@ export function createLevel(
   // food deliberately off that line so the first thing you learn is that
   // stepping aside is worth something.
   const middle = Math.floor(config.height / 2);
-  const start: Vec = config.openRoom ? { x: 0, y: middle } : { x: 0, y: 0 };
+  const start: Vec = config.openRoom ? { x: 0, y: middle } : bestStart(maze);
   const exit = config.openRoom
     ? { x: config.width - 1, y: middle }
     : farthestFrom(maze, start);

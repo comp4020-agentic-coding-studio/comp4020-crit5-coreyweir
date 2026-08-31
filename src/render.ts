@@ -25,7 +25,10 @@ const TARGET_HORIZONTAL_FOV = 88;
 function verticalFov(aspect: number): number {
   const h = (TARGET_HORIZONTAL_FOV * Math.PI) / 180;
   const v = 2 * Math.atan(Math.tan(h / 2) / aspect);
-  return THREE.MathUtils.clamp((v * 180) / Math.PI, 45, 118);
+  // Capped well below the 129 degrees portrait actually asks for: past about
+  // 100 the floor and ceiling swallow the frame and the corridor you are
+  // trying to read gets squeezed into a band.
+  return THREE.MathUtils.clamp((v * 180) / Math.PI, 45, 100);
 }
 
 function worldOf(cell: Vec): THREE.Vector3 {
@@ -83,7 +86,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
 
   /** Mottled noise, drawn once. Cheaper than shipping an image and it tiles. */
   function stoneTexture(base: string, speckle: string): THREE.CanvasTexture {
-    const size = 128;
+    const size = 256;
     const canvas = document.createElement("canvas");
     canvas.width = size;
     canvas.height = size;
@@ -92,7 +95,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       ctx.fillStyle = base;
       ctx.fillRect(0, 0, size, size);
       ctx.fillStyle = speckle;
-      for (let i = 0; i < 2600; i += 1) {
+      for (let i = 0; i < 9000; i += 1) {
         ctx.globalAlpha = 0.04 + Math.random() * 0.14;
         const r = 1 + Math.random() * 3;
         ctx.fillRect(Math.random() * size, Math.random() * size, r, r);
@@ -105,8 +108,12 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     return texture;
   }
 
+  const stoneMap = stoneTexture("#8d8479", "#3a3129");
+  // Each wall block is a scaled unit cube, so UVs run 0..1 across a face
+  // whatever its real size. Tiling twice keeps the grain from smearing.
+  stoneMap.repeat.set(2, 1.6);
   const stone = new THREE.MeshStandardMaterial({
-    map: stoneTexture("#8d8479", "#3a3129"),
+    map: stoneMap,
     color: 0xffffff,
     roughness: 0.95,
     metalness: 0,

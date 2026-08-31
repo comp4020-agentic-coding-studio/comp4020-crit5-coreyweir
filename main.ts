@@ -15,7 +15,13 @@ const hud = createHud();
 
 const seed = () => Math.floor(Math.random() * 2 ** 31);
 
-let state = createLevel(1, seed());
+// Dev-only: ?level=4 to look at a level without playing up to it. Stripped
+// from the production bundle, so there is no backdoor in the shipped game.
+const startLevel = import.meta.env.DEV
+  ? Number(new URLSearchParams(location.search).get("level")) || 1
+  : 1;
+
+let state = createLevel(startLevel, seed());
 let hold = 0;
 let last = performance.now();
 
@@ -27,7 +33,7 @@ function settle(): void {
   if (state.status === "levelComplete") {
     state = nextLevel(state, seed());
   } else {
-    state = createLevel(1, seed());
+    state = createLevel(startLevel, seed());
   }
 }
 
