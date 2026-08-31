@@ -80,7 +80,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.1;
+  renderer.toneMappingExposure = 0.92;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x05060a);
@@ -90,11 +90,11 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 200);
   camera.position.y = EYE_HEIGHT;
 
-  scene.add(new THREE.AmbientLight(0x46536e, 0.85));
+  scene.add(new THREE.AmbientLight(0x46536e, 0.5));
 
   // Your own light, kept short-range: enough to read the walls beside you,
   // not enough to floodlight the maze.
-  const carried = new THREE.PointLight(0xffc789, 17, 11, 1.8);
+  const carried = new THREE.PointLight(0xffc789, 8, 9, 1.8);
   carried.position.y = EYE_HEIGHT;
   scene.add(carried);
 
@@ -163,7 +163,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   beast.add(flame);
   // The one light that earns a shadow map: it is what makes the torch bleed
   // around a corner instead of shining through the wall.
-  const torch = new THREE.PointLight(0xffa542, 30, 18, 2);
+  const torch = new THREE.PointLight(0xffa542, 18, 16, 2);
   torch.position.set(0.7, 1.75, 0);
   torch.castShadow = true;
   torch.shadow.mapSize.set(512, 512);
@@ -471,7 +471,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       for (let x = 1; x < maze.width; x += spacing) {
         if (braziers.length >= 8) break;
         const at = worldOf({ x, y });
-        const light = new THREE.PointLight(0xff9a3c, 13, 11, 2);
+        const light = new THREE.PointLight(0xff9a3c, 7, 9, 2);
         light.position.set(at.x, 2.3, at.z);
         level.add(light);
         braziers.push(light);
@@ -568,7 +568,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     flicker += dt;
     const wobble = 1 + Math.sin(flicker * 11) * 0.06 + Math.sin(flicker * 3.7) * 0.04;
     carried.position.copy(camera.position);
-    carried.intensity = (isArmed(state) ? 24 : 17) * wobble;
+    carried.intensity = (isArmed(state) ? 12 : 8) * wobble;
     carried.color.setHex(isArmed(state) ? 0xbcd4ff : 0xffc789);
 
     if (state.minotaur) {
@@ -579,7 +579,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       from.lerp(to, stalked);
       beast.position.set(from.x, 0, from.z);
       beast.lookAt(camera.position.x, 0, camera.position.z);
-      torch.intensity = 30 * wobble;
+      torch.intensity = 18 * wobble;
     } else {
       beast.visible = false;
       torch.intensity = 0;

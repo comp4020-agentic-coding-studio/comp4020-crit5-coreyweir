@@ -30,9 +30,10 @@ function corridor(length: number): Maze {
 
 /** A five-cell corridor with the minotaur held still unless a test frees it. */
 function state(overrides: Partial<GameState> = {}): GameState {
+  const maze = corridor(5);
   const base: GameState = {
     level: 2,
-    maze: corridor(5),
+    maze,
     start: { x: 0, y: 0 },
     player: { x: 0, y: 0 },
     facing: EAST,
@@ -50,6 +51,7 @@ function state(overrides: Partial<GameState> = {}): GameState {
     meat: [],
     armedFor: 0,
     exit: { x: 4, y: 0 },
+    seen: new Uint8Array(maze.width * maze.height),
     status: "playing",
     playerCooldown: 0,
     minotaurCooldown: 999,

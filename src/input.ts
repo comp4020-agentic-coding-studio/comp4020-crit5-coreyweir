@@ -14,11 +14,6 @@ export interface Input {
   pending(): Intent | null;
   /** Called once the game has actually turned, so the queue can advance. */
   turned(): void;
-  /**
-   * Where the head is pointed, relative to the body, in the same space as
-   * `camera.rotation.y` — so it goes *down* as the mouse goes right.
-   */
-  look(dt: number): number;
   dispose(): void;
 }
 
@@ -35,13 +30,18 @@ const KEYS: Record<string, Intent> = {
   KeyS: "turnAround",
 };
 
-/** As far round as a quarter turn would take you, and no further. */
-const MAX_LOOK = Math.PI / 2;
-const LOOK_PER_PIXEL = 0.0032;
-/** Roughly a quarter turn in a quarter second, so a lock reads as a turn. */
-const RECENTRE_RATE = 6.5;
-/** Past this, "walk on" means the corridor you are looking down. */
-const SNAP_AT = Math.PI / 4;
+/**
+ * Free mouse look was tried and removed after a playthrough.
+ *
+ * On paper it fixed the cost of turning: glance down a side corridor without
+ * committing your feet to it. In the hand it did the opposite — the body is on
+ * a four-direction grid, so a head that points anywhere else means the thing
+ * you are looking at and the thing forward will walk into are different, and
+ * every step became a small act of translation. Turning is the game's one real
+ * cost and hiding it made the game harder to read, not easier. Reverted; the
+ * wider 104-degree field of view is what actually solved the peripheral
+ * problem it was aimed at.
+ */
 
 function isTurn(intent: Intent): boolean {
   return intent !== "forward";
@@ -54,29 +54,15 @@ export function createInput(surface: HTMLElement): Input {
   // could feel: holding D a fraction too long spun you through two quarter
   // turns and left you facing backwards. A turn is a decision, so it happens
   // once per press however long the key is down.
-  let walking = false;
   const turns: Intent[] = [];
-
-  let head = 0;
-  let recentring = false;
+  // Which keys are currently asking to keep walking. A set rather than a flag
+  // because two of them can say so at once.
+  const treading = new Set<string>();
 
   const queue = (intent: Intent): void => {
     // Two deep: a deliberate double tap is a 180, and nothing beyond that is
     // anything but a mistake you would have to unwind.
     if (turns.length < 2) turns.push(intent);
-    recentring = true;
-  };
-
-  // Pressing forward re-locks the body to whatever you are looking down. The
-  // head is free, but your feet are always on the grid, so committing to a
-  // direction has to be one gesture, not two.
-  const goForward = (): void => {
-    if (turns.length === 0) {
-      if (head <= -SNAP_AT) queue("turnRight");
-      else if (head >= SNAP_AT) queue("turnLeft");
-    }
-    recentring = true;
-    walking = true;
   };
 
   const onKeyDown = (event: KeyboardEvent): void => {
@@ -85,12 +71,14 @@ export function createInput(surface: HTMLElement): Input {
     event.preventDefault();
     if (event.repeat) return;
     if (isTurn(intent)) queue(intent);
-    else goForward();
+    // Turning round is what you do with something behind you, and standing
+    // still to admire it afterwards is not the next thing you wanted. Holding
+    // it spins you once and then runs.
+    if (intent === "forward" || intent === "turnAround") treading.add(event.code);
   };
 
   const onKeyUp = (event: KeyboardEvent): void => {
-    const intent = KEYS[event.code];
-    if (intent && !isTurn(intent)) walking = false;
+    treading.delete(event.code);
   };
 
   // Tap zones: the third of the screen you touch is the way you go. Nothing to
@@ -107,39 +95,21 @@ export function createInput(surface: HTMLElement): Input {
   };
 
   const onPointerDown = (event: PointerEvent): void => {
-    if (event.pointerType === "mouse") {
-      // Mouse look wants the cursor out of the way and off the screen edges.
-      // Optional, always: every rule of the game is reachable from the keys.
-      if (document.pointerLockElement !== surface) void surface.requestPointerLock();
-      return;
-    }
     const intent = zoneOf(event.clientX);
     if (isTurn(intent)) {
       queue(intent);
       return;
     }
     walkers.add(event.pointerId);
-    goForward();
     surface.setPointerCapture(event.pointerId);
   };
 
   const onPointerUp = (event: PointerEvent): void => {
-    if (!walkers.delete(event.pointerId)) return;
-    if (walkers.size === 0) walking = false;
-  };
-
-  const onPointerMove = (event: PointerEvent): void => {
-    if (event.pointerType !== "mouse") return;
-    if (event.movementX === 0) return;
-    recentring = false;
-    head = Math.max(
-      -MAX_LOOK,
-      Math.min(MAX_LOOK, head - event.movementX * LOOK_PER_PIXEL),
-    );
+    walkers.delete(event.pointerId);
   };
 
   const onBlur = (): void => {
-    walking = false;
+    treading.clear();
     walkers.clear();
     turns.length = 0;
   };
@@ -147,29 +117,20 @@ export function createInput(surface: HTMLElement): Input {
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
   window.addEventListener("blur", onBlur);
-  window.addEventListener("pointermove", onPointerMove);
   surface.addEventListener("pointerdown", onPointerDown);
   surface.addEventListener("pointerup", onPointerUp);
   surface.addEventListener("pointercancel", onPointerUp);
 
   return {
-    pending: () => turns[0] ?? (walking ? "forward" : null),
+    pending: () =>
+      turns[0] ?? (treading.size > 0 || walkers.size > 0 ? "forward" : null),
     turned() {
       turns.shift();
-      recentring = true;
-    },
-    look(dt) {
-      if (recentring && head !== 0) {
-        const step = RECENTRE_RATE * dt;
-        head = head > 0 ? Math.max(0, head - step) : Math.min(0, head + step);
-      }
-      return head;
     },
     dispose() {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
-      window.removeEventListener("pointermove", onPointerMove);
       surface.removeEventListener("pointerdown", onPointerDown);
       surface.removeEventListener("pointerup", onPointerUp);
       surface.removeEventListener("pointercancel", onPointerUp);

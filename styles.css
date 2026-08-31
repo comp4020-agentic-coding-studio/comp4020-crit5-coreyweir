@@ -322,6 +322,16 @@ body {
   }
 }
 
+.map {
+  position: fixed;
+  top: calc(var(--chrome-pad) + 2rem);
+  right: var(--chrome-pad);
+  width: clamp(6.5rem, 13vw, 10rem);
+  aspect-ratio: 1;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
 /* A breakpoint override only wins on source order, so it lives at the end.
    This cost time twice in C4, in both directions. */
 @media (max-width: 30rem) {
@@ -338,5 +348,9 @@ body {
   .gauge,
   .blade {
     max-width: none;
+  }
+
+  .map {
+    width: 7rem;
   }
 }

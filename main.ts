@@ -13,12 +13,17 @@ import {
 import { createAudio } from "./src/audio";
 import { createHud } from "./src/hud";
 import { createInput } from "./src/input";
+import { createMinimap } from "./src/minimap";
 import { createRenderer } from "./src/render";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#view");
 if (!canvas) throw new Error("missing #view");
 
+const map = document.querySelector<HTMLCanvasElement>("#map");
+if (!map) throw new Error("missing #map");
+
 const renderer = createRenderer(canvas);
+const minimap = createMinimap(map);
 const input = createInput(canvas);
 const audio = createAudio();
 const hud = createHud();
@@ -84,7 +89,8 @@ function frame(now: number): void {
 
   hud.update(state);
   audio.update(state);
-  renderer.update(state, dt, input.look(dt));
+  minimap.draw(state);
+  renderer.update(state, dt);
   requestAnimationFrame(frame);
 }
 

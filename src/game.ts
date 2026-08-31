@@ -101,6 +101,12 @@ export interface GameState {
   readonly meat: readonly Vec[];
   readonly armedFor: number;
   readonly exit: Vec;
+  /**
+   * One byte per cell, set once you have stood in it or seen down it. This is
+   * Ariadne's thread: the map is drawn by walking, so the maze is still
+   * unknown ahead of you and merely *remembered* behind you.
+   */
+  readonly seen: Uint8Array;
   readonly status: Status;
   readonly playerCooldown: number;
   readonly minotaurCooldown: number;
@@ -382,10 +388,31 @@ export function createLevel(
     armedFor: 0,
     exit,
     status: "playing",
+    seen: markSeen(maze, new Uint8Array(maze.width * maze.height), start),
     playerCooldown: 0,
     minotaurCooldown: MINOTAUR_STEP_SECONDS,
     rngState: seed,
   };
+}
+
+/**
+ * Mark where you are and everything you can see from it.
+ *
+ * Sight, not proximity: a cell counts as seen when it is down an open corridor
+ * from you, which is exactly the rule the minotaur uses to spot you. Same
+ * information, both ways.
+ */
+export function markSeen(maze: Maze, seen: Uint8Array, at: Vec): Uint8Array {
+  const out = Uint8Array.from(seen);
+  out[cellIndex(maze, at)] = 1;
+  for (const dir of DIRECTIONS) {
+    let cursor = at;
+    while (isOpen(maze, cursor, dir)) {
+      cursor = stepFrom(cursor, dir);
+      out[cellIndex(maze, cursor)] = 1;
+    }
+  }
+  return out;
 }
 
 export function isArmed(state: GameState): boolean {
@@ -549,6 +576,10 @@ export function tick(
         moveFor: seconds,
       };
     }
+  }
+
+  if (next.player !== playerWas) {
+    next = { ...next, seen: markSeen(next.maze, next.seen, next.player) };
   }
 
   next = collect(next);
