@@ -130,7 +130,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   const beast = new THREE.Group();
   const body = new THREE.Mesh(
     new THREE.BoxGeometry(1.5, 2.4, 1.2),
-    new THREE.MeshStandardMaterial({ color: 0x2b1d18, roughness: 0.9 }),
+    new THREE.MeshStandardMaterial({ color: 0x5b3f30, roughness: 0.85 }),
   );
   body.position.y = 1.2;
   body.castShadow = true;
@@ -142,7 +142,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   horns.position.y = 2.3;
   beast.add(horns);
   const flame = new THREE.Mesh(
-    new THREE.SphereGeometry(0.28, 10, 10),
+    new THREE.SphereGeometry(0.22, 10, 10),
     new THREE.MeshBasicMaterial({ color: 0xffb347 }),
   );
   flame.position.set(0.85, 1.9, 0);

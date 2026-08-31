@@ -13,7 +13,13 @@ const renderer = createRenderer(canvas);
 const input = createInput(canvas);
 const hud = createHud();
 
-const seed = () => Math.floor(Math.random() * 2 ** 31);
+// Dev-only: ?seed=123 pins the layout so a change can be compared against the
+// same maze twice. Without it every reload is a different labyrinth and any
+// visual comparison is guesswork.
+const pinned = import.meta.env.DEV
+  ? Number(new URLSearchParams(location.search).get("seed")) || 0
+  : 0;
+const seed = () => pinned || Math.floor(Math.random() * 2 ** 31);
 
 // Dev-only: ?level=4 to look at a level without playing up to it. Stripped
 // from the production bundle, so there is no backdoor in the shipped game.
