@@ -12,9 +12,12 @@ minotaur as a food source.
 
 ## The moments that mattered
 
-- one commit: [`a1b2c3d`](https://github.com/YOUR-ORG/YOUR-REPO/commit/a1b2c3d)
-- a range:
-  [`a1b2c3d...e4f5a6b`](https://github.com/YOUR-ORG/YOUR-REPO/compare/a1b2c3d...e4f5a6b)
+- the rules before the renderer:
+  [`6dc26eb`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-coreyweir/commit/6dc26eb)
+- the first thing you could actually play:
+  [`1877728`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-coreyweir/commit/1877728)
+- everything that came from playing it rather than reading it:
+  [`5da3e34...a1982de`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-coreyweir/compare/5da3e34...a1982de)
 
 The first completed iteration of the game *worked*, but it felt very clunky. The forwards movement felt very discrete as opposed to
 continuous, and playing the game it felt that you frequently needed to look left and right rapidly to check if the coast was clear. It
