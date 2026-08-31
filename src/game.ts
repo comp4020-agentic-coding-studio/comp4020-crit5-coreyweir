@@ -209,8 +209,8 @@ export function createLevel(
 
   const food = config.openRoom
     ? [
-        { x: 2, y: middle - 2 },
-        { x: 2, y: middle + 2 },
+        { x: 2, y: middle - 1 },
+        { x: 2, y: middle + 1 },
       ].filter((c) => c.y >= 0 && c.y < config.height)
     : pickCells(maze, config.food, taken, rng);
   taken.push(...food);

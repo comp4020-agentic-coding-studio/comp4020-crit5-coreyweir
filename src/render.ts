@@ -153,26 +153,46 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
 
   // --- the way out ---------------------------------------------------------
   // depthTest off so it draws over the walls: you always know WHERE, never HOW.
-  const beacon = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.14, 0.14, 9, 8, 1, true),
-    new THREE.MeshBasicMaterial({
-      color: 0x76ff9c,
+  /** A soft radial glow. Daylight seen from inside a hill, not a strip light. */
+  function glowTexture(): THREE.CanvasTexture {
+    const size = 128;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+      g.addColorStop(0, "rgba(190,255,205,0.85)");
+      g.addColorStop(0.35, "rgba(90,220,130,0.32)");
+      g.addColorStop(1, "rgba(60,190,110,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, size, size);
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+  }
+
+  // depthTest off so it reads through the walls: you always know WHERE the way
+  // out is, never HOW to get there. That asymmetry is the whole navigation game.
+  const beacon = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: glowTexture(),
       transparent: true,
-      opacity: 0.75,
+      opacity: 0.9,
       blending: THREE.AdditiveBlending,
       depthTest: false,
       depthWrite: false,
       fog: false,
-      side: THREE.DoubleSide,
     }),
   );
+  beacon.scale.set(7, 7, 1);
   beacon.renderOrder = 999;
-  beacon.position.y = 3.5;
   scene.add(beacon);
 
   const doorway = new THREE.Mesh(
     new THREE.BoxGeometry(CELL * 0.8, 0.1, CELL * 0.8),
-    new THREE.MeshBasicMaterial({ color: 0x9dffbc }),
+    new THREE.MeshBasicMaterial({ color: 0x4fd987 }),
   );
   doorway.position.y = 0.06;
   scene.add(doorway);
@@ -407,7 +427,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     }
 
     const exit = worldOf(state.exit);
-    beacon.position.set(exit.x, 3.5, exit.z);
+    beacon.position.set(exit.x, 2.2, exit.z);
     doorway.position.set(exit.x, 0.06, exit.z);
     doorLight.position.set(exit.x, 1.5, exit.z);
 
