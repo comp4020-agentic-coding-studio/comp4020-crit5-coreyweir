@@ -1,70 +1,46 @@
 # Process overview
 
-<!-- TEMPLATE: this file is a shape to fill in, not a form. Replace everything
-     in it with your own overview, and delete this comment — `pnpm
-     check:evidence` will remind you if it's still here. -->
-
-A reading-guide to how the work came together --- a map to your process, not an
-essay about it. Markers read this file and follow its citations; they don't
-trawl the repo for evidence you didn't point at, so if a moment mattered, cite
-it.
-
-This file is the shape; the course site's
-[assessment page](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/#what-you-submit)
-is the requirement, and its
-[word counts](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/#word-counts)
-cover every deliverable.
-
 ## What I built
 
-One paragraph: the thing, and the idea behind it.
+I built Asterion, a 3D / 2.5D (3D map, movement in 2D but can turn) maze grid survival game with procedurally
+generated levels, lives, and score
+with a hunger mechanic, a sword powerup, and a minotaur that functions both as a threat and a
+potential food source, as well as score. The most basic strategy would be to take the most direct
+possible path to the goal while avoiding the minotaur. More advanced players will keep track of where
+sword power-ups are and attempt to maximise their score by collecting as much food as possible, using the
+minotaur as a food source.
 
 ## The moments that mattered
-
-Three or four for an assignment; fewer is fine for a weekly prototype. Keep the
-list short so each moment has room to do all four jobs:
-
-1. **what happened** --- the problem, or the thing that went wrong
-2. **what you did instead of the obvious thing** --- the call you made, and why
-   it beat the obvious one
-3. **how you knew it was right** --- the check you ran, the viewport you looked
-   at, what you read before accepting the diff
-4. **the citation** --- a commit or commit range, a `CLAUDE.md` change, a check
-   that went from red to green, a prompt paired with the commit it produced
-
-Jobs 2 and 3 are the ones the repo can't tell a reader on its own, so they're
-where the marks are. The strongest moments are the ones where a correction
-landed in the **harness** --- the standards and checks your work has to satisfy
---- rather than in a retry: a rule added to `CLAUDE.md`, a check wired up, an
-attempt thrown away. Retrying until it passes is the routine case, and changing
-what the work runs against is the skilled one.
-
-Cite each moment as a link whose text is the commit hash or range and whose
-target is this repo's commit or compare URL, so a reader clicks straight to the
-evidence:
 
 - one commit: [`a1b2c3d`](https://github.com/YOUR-ORG/YOUR-REPO/commit/a1b2c3d)
 - a range:
   [`a1b2c3d...e4f5a6b`](https://github.com/YOUR-ORG/YOUR-REPO/compare/a1b2c3d...e4f5a6b)
 
-To pair a prompt with the commit it produced, quote the prompt (curated, not a
-full transcript) next to the citation:
+The first completed iteration of the game *worked*, but it felt very clunky. The forwards movement felt very discrete as opposed to
+continuous, and playing the game it felt that you frequently needed to look left and right rapidly to check if the coast was clear. It
+felt like the game made you more likely to die, not through anything you did incorrectly, but through the combination of what was visible
+to you and how you interacted with the world. I considered adding some sort of transition as you moved into new corridors that functioned as
+a pause and gave you a view of your surroundings: it would've fit with the 2.5D angle (transitioning to a new plane of play), but before committing
+to it I decided to keep it simple. I asked Claude to fix the jumpiness of the movement, to widen the FoV so you could actually see more of your surroundings
+without turning, and to add a 180 degree turn button so you could more quickly check behind you. These changes landed in
+[`5da3e34`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-coreyweir/commit/5da3e34). While they didn't resolve all of my issues, the wider FoV
+did help, and the easier 180 also helped. I thus decided that I was on the right track, and instead of adding gimmicks like animations, I needed to continue
+addressing the fundamentals: the camera, the map, the control scheme.
 
-> the prompt, verbatim
-
-Screenshots are welcome where one carries the verification better than a
-sentence does. Commit the file to this repo and link it with a **relative**
-path, which is what makes it render on GitHub: `![alt text](docs/before.png)`.
-Images don't count towards the word count and don't replace the citation.
-
-## Before you ship
-
-`pnpm check:evidence` verifies your citations resolve to real commits, that a
-reflection entry the marker reads is in `reflections/`, and that your
-`CLAUDE.md` is there --- before a marker ever opens the file. It checks that
-your map is traceable, not that it is good: the marker judges whether your
-small, deliberately chosen set of moments shows real judgement and reflection. A
-green check is not a substitute for that curation.
-
-Images aren't checked: unlike a citation whose SHA doesn't resolve, a broken
-image is visible the moment this file is rendered on GitHub.
+Playing the updated version, I realised the problem was how we were handling the weird 2.5D / 3D mixture: it wasn't
+easy to quickly examine the space without free camera control, and there were too many turns. With discrete movement in four directions only, it was incredibly important
+that we got the ratio of straights to turns right. Too many and the game would feel clunky and they'd be frustrating instead of suspenseful. Too few and the game could
+become boring. Additionally, the lack of sound cues made the game significantly less engaging and made it feel like you were playing with your hands behind your back.
+Accordingly, I encouraged Claude to allow free camera control up 90 degrees left or right (like turning your head)—including while moving—but to lock to the appropriate
+discrete direction on the next keypress. I also encouraged Opus to increase the granularity of the coordinates, so a quick W press resulted in a small movement. I also
+asked it to add sound cues, and to make our 'world 1-1' equivalent feel more space constrained like the rest of the levels (so as to avoid the free camera movement becoming
+counter-intuitive), plus add a 'world 1-2' where the sword and minotaur are introduced. The idea was to introduce all the gameplay mechanics early on, so that they didn't
+become frustration inducing the first time a player encountered them in later levels. Simultaneously, I asked Claude to try to improve on that 'straight to turn' ratio, as well
+as to make the UI more intuitive. The idea behind this prompt was: great, the game is playable, the mechanics all work; now, we need to add the polish that take it from
+'technically playable' to 'engaging and enjoyable'. The results of this prompt landed in
+[`7f6e715`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-coreyweir/commit/7f6e715). Playing the
+updated game, I knew I was on the right track: the sound effects made it feel more engaging, the improved early levels and UI made the game feel all the more intuitive, and the
+updated step size felt much better. That said, I was way off on the camera control: it didn't work, at all. And the game still felt far too hard. Accordingly, I asked Claude
+to remove the free camera control, make S run after doing the 180 (so the player had some chance of escaping a minotaur), further slow the minotaur relative to the player,
+and add a minimap to avoid cornering. These changes landed in
+[`7f6e715...1392528`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-coreyweir/compare/7f6e715...1392528), and playing the updated game I was finally happy with it.
