@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EAST, WEST } from "./grid";
-import { type Maze } from "./maze";
+import { type Maze, corridorLength } from "./maze";
 import {
   type GameState,
   ARMED_STEP_SECONDS,
@@ -218,11 +218,15 @@ describe("walls and endings", () => {
 describe("the first level", () => {
   // It is the tutorial, and it is made of level design: small enough to see the
   // whole loop in, and nothing hunting you while you learn it.
-  it("is small, and nothing is hunting you", () => {
+  it("is one open room, so the whole loop is visible at once", () => {
     const first = createLevel(1, 42);
-    expect(first.maze.width).toBeLessThanOrEqual(3);
     expect(first.minotaur).toBeNull();
     expect(first.food.length).toBeGreaterThan(0);
+    // No internal walls: you can see the food and the way out from where you
+    // are standing, which is the only way to teach "eat, then leave" wordlessly.
+    expect(corridorLength(first.maze, { x: 0, y: 0 }, EAST)).toBe(
+      first.maze.width - 1,
+    );
   });
 
   it("puts the way out somewhere other than where you are standing", () => {

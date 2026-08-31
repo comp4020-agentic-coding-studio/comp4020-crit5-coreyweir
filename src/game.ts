@@ -7,6 +7,7 @@
 import {
   type Dir,
   type Vec,
+  DIRECTIONS,
   NORTH,
   sameCell,
   stepFrom,
@@ -16,10 +17,12 @@ import {
 import {
   type Maze,
   cellIndex,
+  corridorLength,
   createRng,
   distancesFrom,
   generateMaze,
   isOpen,
+  openRoom,
 } from "./maze";
 import { type MinotaurMode, decideMinotaur } from "./minotaur";
 
@@ -80,6 +83,8 @@ export interface LevelConfig {
   readonly food: number;
   readonly swords: number;
   readonly minotaur: boolean;
+  /** No internal walls — the shape level 1 needs to teach itself. */
+  readonly openRoom?: boolean;
 }
 
 /**
@@ -90,13 +95,14 @@ export interface LevelConfig {
 export function levelConfig(level: number): LevelConfig {
   if (level <= 1) {
     return {
-      width: 3,
-      height: 3,
+      width: 5,
+      height: 5,
       braid: 0,
-      hungerRate: 0.014,
-      food: 1,
+      hungerRate: 0.012,
+      food: 2,
       swords: 0,
       minotaur: false,
+      openRoom: true,
     };
   }
   const size = Math.min(3 + (level - 1) * 2, 13);
@@ -109,6 +115,27 @@ export function levelConfig(level: number): LevelConfig {
     swords: 1 + Math.floor(level / 3),
     minotaur: true,
   };
+}
+
+/**
+ * Which way to face on arrival: down the longest open corridor.
+ *
+ * The opening screen has to invite the first move, and the default of "face
+ * north" spawns you nose-to-nose with the boundary wall — a blank brown
+ * rectangle, which invites nothing. Looking down a corridor with somewhere to
+ * go in it is the whole of the game's first instruction, and it isn't words.
+ */
+export function openingFacing(maze: Maze, from: Vec): Dir {
+  let best: Dir = NORTH;
+  let bestLength = -1;
+  for (const dir of DIRECTIONS) {
+    const length = corridorLength(maze, from, dir);
+    if (length > bestLength) {
+      bestLength = length;
+      best = dir;
+    }
+  }
+  return best;
 }
 
 function farthestFrom(maze: Maze, from: Vec): Vec {
@@ -155,7 +182,9 @@ export function createLevel(
 ): GameState {
   const config = levelConfig(level);
   const rng = createRng(seed);
-  const maze = generateMaze(config.width, config.height, config.braid, rng);
+  const maze = config.openRoom
+    ? openRoom(config.width, config.height)
+    : generateMaze(config.width, config.height, config.braid, rng);
 
   const start: Vec = { x: 0, y: 0 };
   const exit = farthestFrom(maze, start);
@@ -190,7 +219,7 @@ export function createLevel(
     maze,
     start,
     player: start,
-    facing: NORTH,
+    facing: openingFacing(maze, start),
     minotaur,
     minotaurFrom: null,
     minotaurLastSeen: null,
@@ -232,7 +261,7 @@ function loseLife(state: GameState): GameState {
     hunger: 1,
     armedFor: 0,
     player: state.start,
-    facing: NORTH,
+    facing: openingFacing(state.maze, state.start),
     playerCooldown: 0,
     minotaur: state.minotaur ? farthestFrom(state.maze, state.start) : null,
     minotaurFrom: null,

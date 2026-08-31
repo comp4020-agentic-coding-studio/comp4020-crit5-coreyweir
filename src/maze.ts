@@ -115,6 +115,36 @@ export function distancesFrom(maze: Maze, from: Vec): Int32Array {
   return dist;
 }
 
+/**
+ * A room with no internal walls. Level 1 is one of these on purpose: the
+ * teaching is done by the layout, and you cannot learn "eat, then leave" in a
+ * maze that hides both the food and the way out behind a corner.
+ */
+export function openRoom(width: number, height: number): Maze {
+  const maze: Maze = { width, height, cells: new Uint8Array(width * height) };
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      for (const dir of DIRECTIONS) {
+        if (inBounds(maze, stepFrom({ x, y }, dir))) {
+          maze.cells[cellIndex(maze, { x, y })] |= 1 << dir;
+        }
+      }
+    }
+  }
+  return maze;
+}
+
+/** How many cells you can see down `dir` from `from` before a wall stops you. */
+export function corridorLength(maze: Maze, from: Vec, dir: Dir): number {
+  let cursor = from;
+  let seen = 0;
+  while (isOpen(maze, cursor, dir)) {
+    cursor = stepFrom(cursor, dir);
+    seen += 1;
+  }
+  return seen;
+}
+
 /** Cells with exactly one open side. */
 export function deadEnds(maze: Maze): Vec[] {
   const out: Vec[] = [];

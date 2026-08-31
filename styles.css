@@ -1,16 +1,197 @@
+/* Carried forward from C4: [hidden] is a low-specificity user-agent rule and
+   loses to any class that sets display. */
+[hidden] {
+  display: none !important;
+}
+
+:root {
+  --ink: #e8e2d6;
+  --ember: #ff9a3c;
+  --blade: #a8c4ff;
+  --danger: #d9483f;
+  --chrome-pad: clamp(0.75rem, 2.5vw, 1.5rem);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
+  background: #05060a;
+  color: var(--ink);
+  font-family: "Iowan Old Style", Palatino, Georgia, serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#view {
+  position: fixed;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Or scroll and pinch-zoom eat the gestures on a phone. */
+  touch-action: none;
+}
+
+.chrome {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: var(--chrome-pad);
+  pointer-events: none;
+}
+
+.chrome h1 {
+  margin: 0;
+  font-size: clamp(0.95rem, 2.6vw, 1.25rem);
+  font-weight: 400;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  opacity: 0.5;
+}
+
+.chrome nav a {
+  pointer-events: auto;
+  color: var(--ink);
+  opacity: 0.32;
+  font-size: 1.1rem;
+  text-decoration: none;
+}
+
+.chrome nav a:hover,
+.chrome nav a:focus-visible {
+  opacity: 0.75;
+}
+
+.hud {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: clamp(0.6rem, 2.5vw, 1.25rem);
+  padding: var(--chrome-pad);
+  pointer-events: none;
+}
+
+.gauge {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-width: 32rem;
+}
+
+.gauge__track {
+  height: 0.7rem;
+  border: 1px solid rgb(232 226 214 / 0.28);
+  background: rgb(0 0 0 / 0.45);
+  overflow: hidden;
+}
+
+.gauge__track--thin {
+  height: 0.3rem;
+}
+
+.gauge__fill {
+  height: 100%;
+  transform-origin: left center;
+  background: linear-gradient(90deg, #b8541f, var(--ember));
+  transition: background-color 240ms linear;
+}
+
+.gauge__fill[data-low="true"] {
+  background: linear-gradient(90deg, #7a1c17, var(--danger));
+  animation: pulse 780ms ease-in-out infinite;
+}
+
+.gauge__fill--sword {
+  background: linear-gradient(90deg, #4a6bb0, var(--blade));
+  opacity: 0;
+}
+
+.gauge__fill--sword[data-armed="true"] {
+  opacity: 1;
+}
+
+.lives {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.pip {
+  width: 0.62rem;
+  height: 0.62rem;
+  background: var(--ink);
+  opacity: 0.8;
+  transform: rotate(45deg);
+}
+
+.score {
+  min-width: 3ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(1rem, 3vw, 1.35rem);
+  letter-spacing: 0.08em;
+  opacity: 0.72;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  display: grid;
+  place-content: center;
   padding: 2rem;
-  font-family: system-ui, sans-serif;
-  line-height: 1.6;
-  color: #1a1a1a;
+  text-align: center;
+  font-size: clamp(1.35rem, 5vw, 2.4rem);
+  letter-spacing: 0.16em;
+  background: rgb(5 6 10 / 0.72);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 420ms ease;
 }
 
-main {
-  max-width: 40rem;
-  margin: 0 auto;
+.overlay[data-visible="true"] {
+  opacity: 1;
+  visibility: visible;
 }
 
-a {
-  color: #0b5fff;
+@keyframes pulse {
+  50% {
+    filter: brightness(1.7);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gauge__fill[data-low="true"] {
+    animation: none;
+  }
+}
+
+/* A breakpoint override only wins on source order, so it lives at the end.
+   This cost time twice in C4, in both directions. */
+@media (max-width: 30rem) {
+  .hud {
+    flex-wrap: wrap;
+  }
+
+  .gauge {
+    order: 3;
+    flex-basis: 100%;
+    max-width: none;
+  }
 }

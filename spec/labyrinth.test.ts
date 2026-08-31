@@ -20,7 +20,12 @@ import { describe, expect, it } from "vitest";
 
 import { type Intent, LEVEL_COUNT, createLevel, tick } from "../src/game";
 import { directionTo } from "../src/grid";
-import { cellIndex, distancesFrom, neighbours } from "../src/maze";
+import {
+  cellIndex,
+  corridorLength,
+  distancesFrom,
+  neighbours,
+} from "../src/maze";
 
 describe("it can be lost, and play ends somewhere", () => {
   it("a wrong move is possible: doing nothing starves you out", () => {
@@ -79,6 +84,35 @@ describe("it can be lost, and play ends somewhere", () => {
             `level ${level} seed ${seed}: something is walled off`,
           ).toBeGreaterThanOrEqual(0);
         }
+      }
+    }
+  });
+});
+
+describe("the opening screen invites the first move", () => {
+  // Whether it *feels* inviting is judged at the crit. What can be held here is
+  // the floor beneath it: you are never spawned facing a wall, because a blank
+  // rectangle invites nothing and there is no text allowed to rescue it.
+  it("never starts you facing a wall", () => {
+    for (let level = 1; level <= LEVEL_COUNT; level += 1) {
+      for (let seed = 1; seed <= 25; seed += 1) {
+        const game = createLevel(level, seed * 17 + level);
+        expect(
+          corridorLength(game.maze, game.player, game.facing),
+          `level ${level} seed ${seed}: spawned facing a wall`,
+        ).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("faces you down the longest corridor there is", () => {
+    for (let seed = 1; seed <= 25; seed += 1) {
+      const game = createLevel(3, seed * 13);
+      const chosen = corridorLength(game.maze, game.player, game.facing);
+      for (const dir of [0, 1, 2, 3] as const) {
+        expect(corridorLength(game.maze, game.player, dir)).toBeLessThanOrEqual(
+          chosen,
+        );
       }
     }
   });
