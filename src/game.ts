@@ -33,7 +33,15 @@ export type Status = "playing" | "levelComplete" | "gameOver" | "won";
 export const BASE_STEP_SECONDS = 0.2;
 export const ARMED_STEP_SECONDS = 0.12;
 export const TURN_SECONDS = 0.14;
-export const MINOTAUR_STEP_SECONDS = 0.2;
+/**
+ * Deliberately slower than your 0.2. At equal speed a pursuer that hunts on
+ * sight is not a threat, it is an execution: you cannot break line of sight by
+ * running, so every sighting costs a life and a perfect player still died on
+ * level two. Slower means it is escapable in a straight line and dangerous
+ * when you hesitate, turn badly, or get cornered — which is where the tension
+ * should live.
+ */
+export const MINOTAUR_STEP_SECONDS = 0.28;
 export const SWORD_SECONDS = 8;
 export const FOOD_RESTORE = 0.3;
 export const MEAT_RESTORE = 0.55;
@@ -105,11 +113,17 @@ export function levelConfig(level: number): LevelConfig {
       openRoom: true,
     };
   }
-  const size = Math.min(3 + (level - 1) * 2, 13);
+  // Room to manoeuvre: a 5x5 with something hunting you is a cupboard.
+  const size = Math.min(5 + (level - 1) * 2, 13);
   return {
     width: size,
     height: size,
-    braid: Math.min((level - 2) * 0.12, 0.4),
+    // Braid runs DOWN, not up, and that inversion was the fix for level two.
+    // A perfect maze is all dead ends, and a dead end with something hunting
+    // you in it is not a challenge, it is a trap you cannot read in advance.
+    // Loops first, so fleeing is a skill you can exercise; dead ends later,
+    // once you have a sword and they are where you corner the thing instead.
+    braid: Math.max(0.95 - (level - 2) * 0.2, 0.35),
     hungerRate: 0.016 + (level - 2) * 0.004,
     food: 2 + level,
     swords: 1 + Math.floor(level / 3),
