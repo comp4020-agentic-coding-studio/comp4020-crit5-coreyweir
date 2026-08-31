@@ -18,7 +18,13 @@ import { join, relative, resolve, sep } from "node:path";
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 
-import { type Intent, LEVEL_COUNT, createLevel, tick } from "../src/game";
+import {
+  type Intent,
+  LEVEL_COUNT,
+  createLevel,
+  respawn,
+  tick,
+} from "../src/game";
 import { directionTo } from "../src/grid";
 import {
   cellIndex,
@@ -30,8 +36,8 @@ import {
 describe("it can be lost, and play ends somewhere", () => {
   it("a wrong move is possible: doing nothing starves you out", () => {
     let game = createLevel(1, 7);
-    for (let i = 0; i < 20_000 && game.status === "playing"; i += 1) {
-      game = tick(game, 0.1, null);
+    for (let i = 0; i < 20_000 && game.status !== "gameOver"; i += 1) {
+      game = game.status === "dying" ? respawn(game) : tick(game, 0.1, null);
     }
     expect(game.status).toBe("gameOver");
   });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EAST, WEST, opposite } from "./grid";
-import { type Maze, corridorLength } from "./maze";
+import { type Maze, corridorLength, pathBetween } from "./maze";
 import {
   type GameState,
   ARMED_STEP_SECONDS,
@@ -15,6 +15,7 @@ import {
   createLevel,
   isArmed,
   playerStepSeconds,
+  respawn,
   tick,
 } from "./game";
 
@@ -80,13 +81,30 @@ describe("hunger", () => {
     expect(resumed.status).toBe("playing");
   });
 
-  it("starving costs a life, resets you, and keeps your score", () => {
-    const starved = tick(state({ hunger: 0.001, score: 70 }), 1, null);
+  // A death now has a beat to it. It used to teleport you home inside the
+  // same frame, which meant the only evidence you had died was a missing pip.
+  it("starving costs a life and stops the game where you fell", () => {
+    const starved = tick(state({ hunger: 0.001, score: 70, player: { x: 1, y: 0 } }), 1, null);
     expect(starved.lives).toBe(2);
-    expect(starved.player).toEqual({ x: 0, y: 0 });
-    expect(starved.hunger).toBe(1);
+    expect(starved.status).toBe("dying");
+    expect(starved.player).toEqual({ x: 1, y: 0 });
     expect(starved.score).toBe(70);
-    expect(starved.status).toBe("playing");
+  });
+
+  it("stays frozen while you are dying", () => {
+    const starved = tick(state({ hunger: 0.001 }), 1, null);
+    expect(tick(starved, 1, "forward")).toEqual(starved);
+  });
+
+  it("respawn puts you back at the start, fed, and keeps your score", () => {
+    const back = respawn(
+      tick(state({ hunger: 0.001, score: 70, player: { x: 1, y: 0 } }), 1, null),
+    );
+    expect(back.status).toBe("playing");
+    expect(back.player).toEqual({ x: 0, y: 0 });
+    expect(back.hunger).toBe(1);
+    expect(back.score).toBe(70);
+    expect(back.lives).toBe(2);
   });
 
   it("running out of lives ends the game", () => {
@@ -137,8 +155,11 @@ describe("meeting the minotaur", () => {
       "forward",
     );
     expect(met.lives).toBe(2);
-    expect(met.player).toEqual({ x: 0, y: 0 });
+    expect(met.status).toBe("dying");
+    // Still standing in the cell where it caught you, so you can see what did.
+    expect(met.player).toEqual({ x: 1, y: 0 });
     expect(met.minotaur).not.toBeNull();
+    expect(respawn(met).player).toEqual({ x: 0, y: 0 });
   });
 
   it("armed kills it, and it drops meat where it fell", () => {
@@ -218,17 +239,36 @@ describe("walls and endings", () => {
 });
 
 describe("the first level", () => {
-  // It is the tutorial, and it is made of level design: small enough to see the
-  // whole loop in, and nothing hunting you while you learn it.
-  it("is one open room, so the whole loop is visible at once", () => {
+  // It is the tutorial, and it is made of level design: a corridor rather than
+  // a hall, nothing hunting you, and every lesson reachable on foot.
+  it("teaches without anything hunting you", () => {
     const first = createLevel(1, 42);
     expect(first.minotaur).toBeNull();
+    expect(first.swords).toHaveLength(0);
     expect(first.food.length).toBeGreaterThan(0);
-    // No internal walls: you can see the food and the way out from where you
-    // are standing, which is the only way to teach "eat, then leave" wordlessly.
-    expect(corridorLength(first.maze, { x: 0, y: 0 }, EAST)).toBe(
-      first.maze.width - 1,
-    );
+  });
+
+  it("opens on a corridor with somewhere to go", () => {
+    const first = createLevel(1, 42);
+    expect(corridorLength(first.maze, first.player, first.facing)).toBeGreaterThanOrEqual(3);
+  });
+
+  it("makes you turn at least once to reach the way out", () => {
+    const first = createLevel(1, 42);
+    const route = pathBetween(first.maze, first.player, first.exit);
+    expect(route.length).toBeGreaterThan(3);
+    const turns = route
+      .slice(1)
+      .map((cell, i) => `${cell.x - route[i].x},${cell.y - route[i].y}`)
+      .filter((step, i, all) => i > 0 && step !== all[i - 1]);
+    expect(turns.length).toBeGreaterThan(0);
+  });
+
+  it("puts everything worth eating somewhere you can walk to", () => {
+    const first = createLevel(1, 42);
+    for (const cell of [...first.food, first.exit]) {
+      expect(pathBetween(first.maze, first.player, cell).length).toBeGreaterThan(0);
+    }
   });
 
   it("puts the way out somewhere other than where you are standing", () => {

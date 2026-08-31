@@ -16,6 +16,7 @@ import {
   createLevel,
   isArmed,
   nextLevel,
+  respawn,
   tick,
 } from "../src/game";
 import {
@@ -100,6 +101,10 @@ function playThrough(seed: number): {
   while (seconds < BUDGET_SECONDS * 3 && guard < 400_000) {
     guard += 1;
     if (state.status === "won" || state.status === "gameOver") break;
+    if (state.status === "dying") {
+      state = respawn(state);
+      continue;
+    }
     if (state.status === "levelComplete") {
       state = nextLevel(state, seed + state.level);
       continue;
@@ -112,7 +117,7 @@ function playThrough(seed: number): {
 }
 
 describe("a stranger can reach an ending inside five minutes", () => {
-  it("a competent run clears all five levels well inside the budget", () => {
+  it("a competent run clears every level well inside the budget", () => {
     const runs = [1, 2, 3, 4, 5, 6, 7, 8].map((seed) => playThrough(seed * 101));
     const finished = runs.filter((run) => run.status === "won");
 
@@ -153,7 +158,7 @@ describe("a stranger can reach an ending inside five minutes", () => {
         state = tick(state, FRAME, intentToward(state, state.exit));
         seconds += FRAME;
       }
-      if (state.status === "gameOver") starved += 1;
+      if (state.status === "dying" || state.status === "gameOver") starved += 1;
     }
     expect(starved).toBeGreaterThan(0);
   });

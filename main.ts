@@ -1,7 +1,16 @@
 // Wiring, and nothing else. If logic starts accumulating here it belongs in
 // one of the modules under src/.
 
-import { LEVEL_COUNT, MAX_DELTA, createLevel, nextLevel, tick } from "./src/game";
+import {
+  DYING_SECONDS,
+  LEVEL_COUNT,
+  MAX_DELTA,
+  createLevel,
+  nextLevel,
+  respawn,
+  tick,
+} from "./src/game";
+import { createAudio } from "./src/audio";
 import { createHud } from "./src/hud";
 import { createInput } from "./src/input";
 import { createRenderer } from "./src/render";
@@ -11,7 +20,13 @@ if (!canvas) throw new Error("missing #view");
 
 const renderer = createRenderer(canvas);
 const input = createInput(canvas);
+const audio = createAudio();
 const hud = createHud();
+
+// The AudioContext starts suspended and only a real gesture may resume it.
+for (const event of ["keydown", "pointerdown"] as const) {
+  window.addEventListener(event, () => audio.resume(), { passive: true });
+}
 
 // Dev-only: ?seed=123 pins the layout so a change can be compared against the
 // same maze twice. Without it every reload is a different labyrinth and any
@@ -36,11 +51,9 @@ let last = performance.now();
 
 function settle(): void {
   hud.clearFlash();
-  if (state.status === "levelComplete") {
-    state = nextLevel(state, seed());
-  } else {
-    state = createLevel(startLevel, seed());
-  }
+  if (state.status === "dying") state = respawn(state);
+  else if (state.status === "levelComplete") state = nextLevel(state, seed());
+  else state = createLevel(startLevel, seed());
 }
 
 function frame(now: number): void {
@@ -52,8 +65,13 @@ function frame(now: number): void {
     hold -= dt;
     if (hold <= 0) settle();
   } else {
-    state = tick(state, dt, input.current());
-    if (state.status === "levelComplete") {
+    const facing = state.facing;
+    state = tick(state, dt, input.pending());
+    if (state.facing !== facing) input.turned();
+
+    if (state.status === "dying") {
+      hold = DYING_SECONDS;
+    } else if (state.status === "levelComplete") {
       hold = state.level >= LEVEL_COUNT ? 1.4 : 0.9;
     } else if (state.status === "gameOver") {
       hud.flash("the labyrinth keeps you");
@@ -65,7 +83,8 @@ function frame(now: number): void {
   }
 
   hud.update(state);
-  renderer.update(state, dt);
+  audio.update(state);
+  renderer.update(state, dt, input.look(dt));
   requestAnimationFrame(frame);
 }
 

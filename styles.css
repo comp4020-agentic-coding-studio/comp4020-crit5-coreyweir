@@ -75,78 +75,162 @@ body {
   opacity: 0.75;
 }
 
+/* Off-screen glyph definitions. display:none would break <use> in some
+   engines; a zero-sized absolutely positioned svg does not. */
+.sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
 .hud {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  /* The armed row keeps its height whether or not there is a sword in it, so
+     picking one up never shunts the hunger bar under your thumb. */
+  grid-template-rows: 1.5rem auto;
+  grid-template-areas:
+    ". blade ."
+    "lives gauge score";
   align-items: center;
-  gap: clamp(0.6rem, 2.5vw, 1.25rem);
+  column-gap: clamp(0.7rem, 3vw, 1.5rem);
   padding: var(--chrome-pad);
   pointer-events: none;
 }
 
 .gauge {
-  flex: 1 1 auto;
+  grid-area: gauge;
   display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  max-width: 32rem;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 34rem;
+}
+
+.gauge__glyph {
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  fill: var(--ember);
+  filter: drop-shadow(0 0 5px rgb(255 154 60 / 0.5));
 }
 
 .gauge__track {
-  height: 0.7rem;
-  border: 1px solid rgb(232 226 214 / 0.28);
-  background: rgb(0 0 0 / 0.45);
+  flex: 1 1 auto;
+  height: 1.1rem;
+  border: 1px solid rgb(232 226 214 / 0.3);
+  background: rgb(0 0 0 / 0.5);
   overflow: hidden;
 }
 
-.gauge__track--thin {
-  height: 0.3rem;
-}
-
 .gauge__fill {
+  display: block;
   height: 100%;
   transform-origin: left center;
   background: linear-gradient(90deg, #b8541f, var(--ember));
-  transition: background-color 240ms linear;
 }
 
-.gauge__fill[data-low="true"] {
+.gauge[data-low="true"] .gauge__fill {
   background: linear-gradient(90deg, #7a1c17, var(--danger));
-  animation: pulse 780ms ease-in-out infinite;
+  animation: pulse 640ms ease-in-out infinite;
 }
 
-.gauge__fill--sword {
-  background: linear-gradient(90deg, #4a6bb0, var(--blade));
+.gauge[data-low="true"] .gauge__glyph {
+  fill: var(--danger);
+  animation: pulse 640ms ease-in-out infinite;
+}
+
+/* The armed timer is a separate object in a separate colour, because a second
+   bar stacked under the first read as a second kind of hunger. */
+.blade {
+  grid-area: blade;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 34rem;
   opacity: 0;
+  transition: opacity 160ms linear;
 }
 
-.gauge__fill--sword[data-armed="true"] {
+.blade[data-armed="true"] {
   opacity: 1;
 }
 
+.blade__glyph {
+  flex: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  fill: var(--blade);
+  filter: drop-shadow(0 0 6px rgb(168 196 255 / 0.7));
+}
+
+.blade__track {
+  flex: 1 1 auto;
+  height: 0.3rem;
+  background: rgb(0 0 0 / 0.5);
+  overflow: hidden;
+}
+
+.blade__fill {
+  display: block;
+  height: 100%;
+  transform-origin: left center;
+  background: linear-gradient(90deg, #4a6bb0, var(--blade));
+}
+
 .lives {
+  grid-area: lives;
   display: flex;
-  gap: 0.4rem;
+  gap: 0.35rem;
+}
+
+.lives[data-lost="true"] {
+  animation: shake 420ms ease-in-out;
 }
 
 .pip {
-  width: 0.62rem;
-  height: 0.62rem;
-  background: var(--ink);
-  opacity: 0.8;
-  transform: rotate(45deg);
+  width: 1.5rem;
+  height: 1.5rem;
+  fill: var(--danger);
+  filter: drop-shadow(0 0 5px rgb(217 72 63 / 0.55));
+}
+
+.tally {
+  grid-area: score;
+  position: relative;
+  margin: 0;
 }
 
 .score {
+  display: block;
   min-width: 3ch;
   text-align: right;
   font-variant-numeric: tabular-nums;
-  font-size: clamp(1rem, 3vw, 1.35rem);
-  letter-spacing: 0.08em;
-  opacity: 0.72;
+  font-size: clamp(1.6rem, 5vw, 2.3rem);
+  line-height: 1;
+  letter-spacing: 0.04em;
+  opacity: 0.88;
+}
+
+/* What the number in the corner is *for*, said in the only vocabulary the
+   brief allows: the amount, floating off the thing that changed. */
+.gain {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(0.9rem, 2.6vw, 1.2rem);
+  color: var(--ember);
+  opacity: 0;
+  white-space: nowrap;
+}
+
+.gain[data-show="true"] {
+  animation: rise 1100ms ease-out;
 }
 
 .overlay {
@@ -176,8 +260,64 @@ body {
   }
 }
 
+@keyframes rise {
+  0% {
+    opacity: 0;
+    transform: translateY(0.4rem);
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-1.8rem);
+  }
+}
+
+@keyframes shake {
+  25% {
+    transform: translateX(-0.35rem);
+  }
+  60% {
+    transform: translateX(0.3rem);
+  }
+}
+
+/* The whole screen takes the hit, so a death is impossible to miss even if you
+   were looking down a corridor rather than at the hearts. */
+.wound {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    ellipse at center,
+    rgb(120 10 6 / 0) 35%,
+    rgb(150 12 8 / 0.85) 100%
+  );
+}
+
+.wound[data-hit="true"] {
+  animation: wound 900ms ease-out;
+}
+
+@keyframes wound {
+  0% {
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .gauge__fill[data-low="true"] {
+  .gauge[data-low="true"] .gauge__fill,
+  .gauge[data-low="true"] .gauge__glyph,
+  .lives[data-lost="true"],
+  .wound[data-hit="true"] {
     animation: none;
   }
 }
@@ -186,12 +326,17 @@ body {
    This cost time twice in C4, in both directions. */
 @media (max-width: 30rem) {
   .hud {
-    flex-wrap: wrap;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: 1.2rem auto auto;
+    grid-template-areas:
+      "blade blade"
+      "gauge gauge"
+      "lives score";
+    row-gap: 0.5rem;
   }
 
-  .gauge {
-    order: 3;
-    flex-basis: 100%;
+  .gauge,
+  .blade {
     max-width: none;
   }
 }

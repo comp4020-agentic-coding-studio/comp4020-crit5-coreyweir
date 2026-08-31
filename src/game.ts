@@ -21,14 +21,21 @@ import {
   corridorLength,
   createRng,
   distancesFrom,
+  fromLayout,
   generateMaze,
   isOpen,
-  openRoom,
+  pathBetween,
 } from "./maze";
 import { type MinotaurMode, decideMinotaur } from "./minotaur";
 
 export type Intent = "forward" | "turnLeft" | "turnRight" | "turnAround";
-export type Status = "playing" | "levelComplete" | "gameOver" | "won";
+export type Status =
+  | "playing"
+  /** Killed, but still standing where it happened, so you can see why. */
+  | "dying"
+  | "levelComplete"
+  | "gameOver"
+  | "won";
 
 // Tuning. These are the numbers that get changed by playing, not by reasoning.
 export const BASE_STEP_SECONDS = 0.24;
@@ -44,7 +51,7 @@ export const TURN_AROUND_SECONDS = 0.26;
  * when you hesitate, turn badly, or get cornered — which is where the tension
  * should live.
  */
-export const MINOTAUR_STEP_SECONDS = 0.335;
+export const MINOTAUR_STEP_SECONDS = 0.4;
 export const SWORD_SECONDS = 8;
 export const FOOD_RESTORE = 0.3;
 export const MEAT_RESTORE = 0.55;
@@ -52,7 +59,9 @@ export const FOOD_SCORE = 10;
 export const MEAT_SCORE = 50;
 export const LEVEL_SCORE = 25;
 export const STARTING_LIVES = 3;
-export const LEVEL_COUNT = 5;
+export const LEVEL_COUNT = 6;
+/** Long enough to read what killed you, short enough not to be a punishment. */
+export const DYING_SECONDS = 1.5;
 
 /**
  * A backgrounded tab returns one enormous delta on its first frame back, which
@@ -102,34 +111,82 @@ export interface LevelConfig {
   readonly width: number;
   readonly height: number;
   readonly braid: number;
+  /** How strongly generation prefers to keep carving in a straight line. */
+  readonly straightness: number;
   readonly hungerRate: number;
   readonly food: number;
   readonly swords: number;
   readonly minotaur: boolean;
-  /** No internal walls — the shape level 1 needs to teach itself. */
-  readonly openRoom?: boolean;
+  /** Drawn by hand rather than generated. See `fromLayout`. */
+  readonly layout?: readonly string[];
+  readonly start?: Vec;
+  readonly exit?: Vec;
+  readonly foodAt?: readonly Vec[];
+  /**
+   * Compose the level instead of scattering it: the sword goes on the route
+   * you were already walking and the minotaur guards the far end of it.
+   */
+  readonly teach?: boolean;
 }
 
 /**
- * Level 1 is the tutorial and it is made of level design: a room small enough
- * to see the whole loop in, one thing to eat, and the way out. Nothing hunts
- * you there, because the lesson is "move, eat, leave" and nothing else.
+ * Level one, drawn rather than generated.
+ *
+ * A corridor with one forced turn, one thing to eat on the way and one worth
+ * stepping aside for. It used to be an open five-by-five room, which taught
+ * the loop but taught it in a hall — and a hall is not what the game is. You
+ * learn "walk, turn, eat, leave" in the shape you will be playing in.
  */
+const LEVEL_ONE = [
+  "###############",
+  "#######       #",
+  "####### #######",
+  "#       #######",
+  "### ###########",
+  "###   #########",
+  "###############",
+];
+
 export function levelConfig(level: number): LevelConfig {
   if (level <= 1) {
     return {
-      width: 5,
-      height: 5,
+      width: 7,
+      height: 3,
       braid: 0,
-      hungerRate: 0.012,
+      straightness: 0,
+      hungerRate: 0.01,
       food: 2,
       swords: 0,
       minotaur: false,
-      openRoom: true,
+      layout: LEVEL_ONE,
+      start: { x: 0, y: 1 },
+      exit: { x: 6, y: 0 },
+      foodAt: [
+        { x: 2, y: 1 },
+        { x: 2, y: 2 },
+      ],
     };
   }
+
+  // Level two is the second half of the tutorial and it teaches the sword.
+  // Small enough that you cannot avoid the lesson, looped enough that you
+  // cannot be cornered while learning it.
+  if (level === 2) {
+    return {
+      width: 5,
+      height: 5,
+      braid: 0.7,
+      straightness: 0.85,
+      hungerRate: 0.014,
+      food: 3,
+      swords: 1,
+      minotaur: true,
+      teach: true,
+    };
+  }
+
   // Room to manoeuvre: a 5x5 with something hunting you is a cupboard.
-  const size = Math.min(5 + (level - 1) * 2, 13);
+  const size = Math.min(5 + (level - 2) * 2, 13);
   return {
     width: size,
     height: size,
@@ -138,10 +195,13 @@ export function levelConfig(level: number): LevelConfig {
     // you in it is not a challenge, it is a trap you cannot read in advance.
     // Loops first, so fleeing is a skill you can exercise; dead ends later,
     // once you have a sword and they are where you corner the thing instead.
-    braid: Math.max(0.95 - (level - 2) * 0.2, 0.35),
-    hungerRate: 0.016 + (level - 2) * 0.004,
+    braid: Math.max(0.95 - (level - 3) * 0.2, 0.35),
+    // Turning is the one thing you cannot do while moving, so a maze that
+    // turns every cell is a maze you spend fiddling instead of dreading.
+    straightness: 0.78,
+    hungerRate: 0.014 + (level - 3) * 0.003,
     food: 2 + level,
-    swords: 1 + Math.floor(level / 3),
+    swords: 1 + Math.floor((level - 1) / 3),
     minotaur: true,
   };
 }
@@ -247,33 +307,40 @@ export function createLevel(
 ): GameState {
   const config = levelConfig(level);
   const rng = createRng(seed);
-  const maze = config.openRoom
-    ? openRoom(config.width, config.height)
-    : generateMaze(config.width, config.height, config.braid, rng);
+  const maze = config.layout
+    ? fromLayout(config.layout)
+    : generateMaze(
+        config.width,
+        config.height,
+        config.braid,
+        rng,
+        config.straightness,
+      );
 
-  // Level 1 is authored, not generated. A tutorial made of level design has to
-  // be composed: the way out dead ahead so the goal needs no stating, and the
-  // food deliberately off that line so the first thing you learn is that
-  // stepping aside is worth something.
-  const middle = Math.floor(config.height / 2);
-  const start: Vec = config.openRoom ? { x: 0, y: middle } : bestStart(maze);
-  const exit = config.openRoom
-    ? { x: config.width - 1, y: middle }
-    : farthestFrom(maze, start);
+  const start: Vec = config.start ?? bestStart(maze);
+  const exit = config.exit ?? farthestFrom(maze, start);
   const taken: Vec[] = [start, exit];
 
-  const food = config.openRoom
-    ? [
-        { x: 2, y: middle - 1 },
-        { x: 2, y: middle + 1 },
-      ].filter((c) => c.y >= 0 && c.y < config.height)
-    : pickCells(maze, config.food, taken, rng);
-  taken.push(...food);
-  const swords = pickCells(maze, config.swords, taken, rng);
+  // The teaching levels are composed, not scattered. Level two has to put a
+  // sword in your hand *before* you meet the thing it works on, or the lesson
+  // is "you died" rather than "that is what the glowing blade was for".
+  const route = config.teach ? pathBetween(maze, start, exit) : [];
+  const placed = route.length >= 4 ? route[Math.floor(route.length / 2)] : null;
+
+  const swords = placed
+    ? [placed]
+    : pickCells(maze, config.swords, taken, rng);
   taken.push(...swords);
 
+  const food = config.foodAt
+    ? config.foodAt.map((c) => ({ ...c }))
+    : pickCells(maze, config.food, taken, rng);
+  taken.push(...food);
+
   let minotaur: Vec | null = null;
-  if (config.minotaur) {
+  if (config.minotaur && placed) {
+    minotaur = route[route.length - 2] ?? exit;
+  } else if (config.minotaur) {
     // Far enough away that it isn't standing on you at the first frame.
     const dist = distancesFrom(maze, start);
     const candidates: Vec[] = [];
@@ -329,21 +396,32 @@ export function playerStepSeconds(state: GameState): number {
   return isArmed(state) ? ARMED_STEP_SECONDS : BASE_STEP_SECONDS;
 }
 
-/** Losing a life resets the level's positions but never the score. */
+/**
+ * Losing a life stops the game where it stands. It used to teleport you back
+ * to the start inside the same frame, and a death you cannot see is a death
+ * you cannot learn from — you were simply somewhere else, with one fewer pip.
+ * The reset waits for `respawn`.
+ */
 function loseLife(state: GameState): GameState {
   const lives = state.lives - 1;
   if (lives <= 0) {
     return { ...state, lives: 0, hunger: 0, status: "gameOver" };
   }
+  return { ...state, lives, status: "dying" };
+}
+
+/** Back on your feet at the start of the level. The score is never reset. */
+export function respawn(state: GameState): GameState {
+  const facing = openingFacing(state.maze, state.start, state.exit);
   return {
     ...state,
-    lives,
+    status: "playing",
     hunger: 1,
     armedFor: 0,
     player: state.start,
-    facing: openingFacing(state.maze, state.start, state.exit),
+    facing,
     playerFrom: state.start,
-    facingFrom: openingFacing(state.maze, state.start, state.exit),
+    facingFrom: facing,
     moveFor: 0,
     playerCooldown: 0,
     minotaur: state.minotaur ? farthestFrom(state.maze, state.start) : null,
@@ -351,6 +429,7 @@ function loseLife(state: GameState): GameState {
     minotaurLastSeen: null,
     minotaurMemory: 0,
     minotaurMode: "patrolling",
+    minotaurCooldown: MINOTAUR_STEP_SECONDS,
   };
 }
 

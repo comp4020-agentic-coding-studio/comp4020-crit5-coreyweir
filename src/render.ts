@@ -9,10 +9,17 @@ import { type Dir, type Vec, delta } from "./grid";
 import { type Maze, isOpen } from "./maze";
 import { type GameState, MINOTAUR_STEP_SECONDS, isArmed } from "./game";
 
-const CELL = 4;
-const WALL_HEIGHT = 3.6;
-const WALL_THICKNESS = 0.5;
-const EYE_HEIGHT = 1.65;
+/**
+ * Four was a hall, not a corridor, and it made every single press of forward
+ * cover four metres in a quarter second. Held down that reads as walking; hit
+ * once it reads as a teleport, which is what made the movement feel discrete
+ * however smoothly it was interpolated. The cell is the step length, so the
+ * cell is what had to shrink.
+ */
+const CELL = 2.75;
+const WALL_HEIGHT = 3.1;
+const WALL_THICKNESS = 0.42;
+const EYE_HEIGHT = 1.6;
 
 /**
  * The phone viewport is 390x844 portrait. `PerspectiveCamera.fov` is the
@@ -55,12 +62,15 @@ function angleDelta(a: number, b: number): number {
 interface Pickup {
   readonly mesh: THREE.Object3D;
   readonly cell: Vec;
+  /** The height it bobs around. */
+  readonly rest: number;
 }
 
 export interface Renderer {
   /** Idempotent; called every frame. */
   resize(): void;
-  update(state: GameState, dt: number): void;
+  /** `look` is the head's yaw offset from the body — see `src/input.ts`. */
+  update(state: GameState, dt: number, look?: number): void;
   dispose(): void;
 }
 
@@ -75,7 +85,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x05060a);
   // Fog does the mood work cheaply, and hides the far edge of the maze.
-  scene.fog = new THREE.FogExp2(0x05060a, 0.055);
+  scene.fog = new THREE.FogExp2(0x05060a, 0.078);
 
   const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 200);
   camera.position.y = EYE_HEIGHT;
@@ -84,7 +94,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
 
   // Your own light, kept short-range: enough to read the walls beside you,
   // not enough to floodlight the maze.
-  const carried = new THREE.PointLight(0xffc789, 26, 14, 1.8);
+  const carried = new THREE.PointLight(0xffc789, 17, 11, 1.8);
   carried.position.y = EYE_HEIGHT;
   scene.add(carried);
 
@@ -133,32 +143,32 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   // --- the minotaur, and the torch that makes it trackable -----------------
   const beast = new THREE.Group();
   const body = new THREE.Mesh(
-    new THREE.BoxGeometry(1.5, 2.4, 1.2),
+    new THREE.BoxGeometry(1.15, 2.2, 0.95),
     new THREE.MeshStandardMaterial({ color: 0x5b3f30, roughness: 0.85 }),
   );
-  body.position.y = 1.2;
+  body.position.y = 1.1;
   body.castShadow = true;
   beast.add(body);
   const horns = new THREE.Mesh(
-    new THREE.BoxGeometry(2.1, 0.22, 0.22),
+    new THREE.BoxGeometry(1.7, 0.2, 0.2),
     new THREE.MeshStandardMaterial({ color: 0xd8cdb4, roughness: 0.6 }),
   );
-  horns.position.y = 2.3;
+  horns.position.y = 2.1;
   beast.add(horns);
   const flame = new THREE.Mesh(
-    new THREE.SphereGeometry(0.22, 10, 10),
+    new THREE.SphereGeometry(0.19, 10, 10),
     new THREE.MeshBasicMaterial({ color: 0xffb347 }),
   );
-  flame.position.set(0.85, 1.9, 0);
+  flame.position.set(0.7, 1.75, 0);
   beast.add(flame);
   // The one light that earns a shadow map: it is what makes the torch bleed
   // around a corner instead of shining through the wall.
-  const torch = new THREE.PointLight(0xffa542, 55, 26, 2);
-  torch.position.set(0.85, 1.9, 0);
+  const torch = new THREE.PointLight(0xffa542, 30, 18, 2);
+  torch.position.set(0.7, 1.75, 0);
   torch.castShadow = true;
   torch.shadow.mapSize.set(512, 512);
   torch.shadow.camera.near = 0.4;
-  torch.shadow.camera.far = 26;
+  torch.shadow.camera.far = 18;
   torch.shadow.bias = -0.004;
   beast.add(torch);
   scene.add(beast);
@@ -166,7 +176,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   // --- the way out ---------------------------------------------------------
   // depthTest off so it draws over the walls: you always know WHERE, never HOW.
   /** A soft radial glow. Daylight seen from inside a hill, not a strip light. */
-  function glowTexture(): THREE.CanvasTexture {
+  function glowTexture(core: string, mid: string, edge: string): THREE.CanvasTexture {
     const size = 128;
     const canvas = document.createElement("canvas");
     canvas.width = size;
@@ -174,9 +184,9 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     const ctx = canvas.getContext("2d");
     if (ctx) {
       const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-      g.addColorStop(0, "rgba(190,255,205,0.85)");
-      g.addColorStop(0.35, "rgba(90,220,130,0.32)");
-      g.addColorStop(1, "rgba(60,190,110,0)");
+      g.addColorStop(0, core);
+      g.addColorStop(0.35, mid);
+      g.addColorStop(1, edge);
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, size, size);
     }
@@ -189,7 +199,11 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   // out is, never HOW to get there. That asymmetry is the whole navigation game.
   const beacon = new THREE.Sprite(
     new THREE.SpriteMaterial({
-      map: glowTexture(),
+      map: glowTexture(
+        "rgba(190,255,205,0.85)",
+        "rgba(90,220,130,0.32)",
+        "rgba(60,190,110,0)",
+      ),
       transparent: true,
       opacity: 0.9,
       blending: THREE.AdditiveBlending,
@@ -198,7 +212,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       fog: false,
     }),
   );
-  beacon.scale.set(7, 7, 1);
+  beacon.scale.set(5, 5, 1);
   beacon.renderOrder = 999;
   scene.add(beacon);
 
@@ -208,7 +222,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   );
   doorway.position.y = 0.06;
   scene.add(doorway);
-  const doorLight = new THREE.PointLight(0x7dffa8, 16, 7, 2);
+  const doorLight = new THREE.PointLight(0x7dffa8, 8, 5, 2);
   doorLight.position.y = 1.5;
   scene.add(doorLight);
 
@@ -217,37 +231,125 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   scene.add(pickups);
   let live: Pickup[] = [];
 
-  const foodGeo = new THREE.IcosahedronGeometry(0.42, 0);
-  const foodMat = new THREE.MeshStandardMaterial({
-    color: 0xe4c15a,
-    emissive: 0x6a4b12,
-    roughness: 0.6,
+  // Shape carries the meaning, because nothing is allowed to caption it. The
+  // food wears the same silhouette and the same ember as the hunger gauge; the
+  // sword wears the same steel blue as the timer that appears when you take
+  // it. Pick one up, watch the matching gauge move, and the HUD is explained.
+  const fleshMat = new THREE.MeshStandardMaterial({
+    color: 0xff9a3c,
+    emissive: 0x7a3708,
+    roughness: 0.45,
+  });
+  const stalkMat = new THREE.MeshStandardMaterial({
+    color: 0x4e7a34,
+    roughness: 0.8,
   });
   const meatMat = new THREE.MeshStandardMaterial({
-    color: 0xa8434b,
+    color: 0xb04350,
     emissive: 0x3a1013,
     roughness: 0.7,
   });
-  const swordGeo = new THREE.BoxGeometry(0.14, 1.7, 0.14);
+  const boneMat = new THREE.MeshStandardMaterial({
+    color: 0xe6dcc4,
+    roughness: 0.6,
+  });
   const swordMat = new THREE.MeshStandardMaterial({
     color: 0xdfe9ff,
-    emissive: 0x5b7fc7,
-    emissiveIntensity: 1.4,
-    roughness: 0.25,
-    metalness: 0.8,
+    emissive: 0x6d92e0,
+    emissiveIntensity: 1.6,
+    roughness: 0.2,
+    metalness: 0.85,
+  });
+  const hiltMat = new THREE.MeshStandardMaterial({
+    color: 0x8fa9d8,
+    emissive: 0x2c4478,
+    roughness: 0.4,
+    metalness: 0.7,
   });
 
-  function addPickup(
-    cell: Vec,
-    geo: THREE.BufferGeometry,
-    mat: THREE.Material,
-    y: number,
-  ): void {
-    const mesh = new THREE.Mesh(geo, mat);
+  const bladeGlow = glowTexture(
+    "rgba(226,238,255,0.9)",
+    "rgba(120,164,255,0.34)",
+    "rgba(70,120,220,0)",
+  );
+
+  function haloOf(scale: number, y: number): THREE.Sprite {
+    const halo = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: bladeGlow,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    halo.scale.set(scale, scale, 1);
+    halo.position.y = y;
+    return halo;
+  }
+
+  function makeFood(): THREE.Object3D {
+    const g = new THREE.Group();
+    const flesh = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 12), fleshMat);
+    flesh.scale.y = 0.92;
+    g.add(flesh);
+    const stalk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.025, 0.03, 0.22, 6),
+      stalkMat,
+    );
+    stalk.position.y = 0.34;
+    g.add(stalk);
+    return g;
+  }
+
+  function makeMeat(): THREE.Object3D {
+    const g = new THREE.Group();
+    const bone = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.05, 0.05, 0.62, 6),
+      boneMat,
+    );
+    bone.rotation.z = Math.PI / 2.6;
+    g.add(bone);
+    const chunk = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 10), meatMat);
+    chunk.scale.set(1, 0.85, 0.85);
+    chunk.position.set(-0.12, -0.1, 0);
+    g.add(chunk);
+    return g;
+  }
+
+  /**
+   * The sword used to be a bare 14cm bar of white, and in a corridor lit by one
+   * guttering torch you walked straight past it. It is the only thing in the
+   * maze that changes what the minotaur does, so it gets a hilt to be
+   * recognisable, a halo to be visible, and a light of its own to announce
+   * itself from round a corner. The halo respects the walls — unlike the exit
+   * beacon it is a landmark, not an x-ray.
+   */
+  function makeSword(): THREE.Object3D {
+    const g = new THREE.Group();
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.15, 0.035), swordMat);
+    blade.position.y = 0.62;
+    g.add(blade);
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.072, 0.24, 4), swordMat);
+    tip.position.y = 1.31;
+    tip.rotation.y = Math.PI / 4;
+    g.add(tip);
+    const guard = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.08, 0.08), hiltMat);
+    g.add(guard);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.32, 0.075), hiltMat);
+    grip.position.y = -0.2;
+    g.add(grip);
+    g.add(haloOf(2.6, 0.6));
+    const light = new THREE.PointLight(0x9fc0ff, 6, 5, 2);
+    light.position.y = 0.8;
+    g.add(light);
+    return g;
+  }
+
+  function addPickup(cell: Vec, mesh: THREE.Object3D, y: number): void {
     const at = worldOf(cell);
     mesh.position.set(at.x, y, at.z);
     pickups.add(mesh);
-    live.push({ mesh, cell });
+    live.push({ mesh, cell, rest: y });
   }
 
   function syncPickups(state: GameState): void {
@@ -260,8 +362,9 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     for (const p of live) pickups.remove(p.mesh);
     live = [];
     for (const { c, kind } of want) {
-      if (kind === "sword") addPickup(c, swordGeo, swordMat, 1.1);
-      else addPickup(c, foodGeo, kind === "meat" ? meatMat : foodMat, 0.55);
+      if (kind === "sword") addPickup(c, makeSword(), 0.85);
+      else if (kind === "meat") addPickup(c, makeMeat(), 0.5);
+      else addPickup(c, makeFood(), 0.5);
     }
   }
 
@@ -368,8 +471,8 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       for (let x = 1; x < maze.width; x += spacing) {
         if (braziers.length >= 8) break;
         const at = worldOf({ x, y });
-        const light = new THREE.PointLight(0xff9a3c, 22, 15, 2);
-        light.position.set(at.x, 2.6, at.z);
+        const light = new THREE.PointLight(0xff9a3c, 13, 11, 2);
+        light.position.set(at.x, 2.3, at.z);
         level.add(light);
         braziers.push(light);
       }
@@ -384,6 +487,8 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   const from = new THREE.Vector3();
   const to = new THREE.Vector3();
   let flicker = 0;
+  /** 0 upright, 1 flat on the floor. The death you were never shown before. */
+  let down = 0;
 
   /** 0 at the moment a move begins, 1 when it lands. */
   function progress(cooldown: number, duration: number): number {
@@ -430,7 +535,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     camera.updateProjectionMatrix();
   }
 
-  function update(state: GameState, dt: number): void {
+  function update(state: GameState, dt: number, look = 0): void {
     resize();
 
     if (builtMaze !== state.maze) {
@@ -445,18 +550,25 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     to.copy(worldOf(state.player));
     from.lerp(to, walked);
 
-    camera.position.set(from.x, EYE_HEIGHT, from.z);
+    // The body is on the grid; the head is not. `look` is a free yaw offset,
+    // so you can glance down a side corridor without committing your feet to
+    // it — which is the whole reason the turn/step rhythm stopped feeling like
+    // a chore. It never changes where you are, so the rules stay untouched.
+    down = state.status === "dying" ? Math.min(1, down + dt / 0.55) : 0;
+    const fell = down * down;
+
+    camera.position.set(from.x, EYE_HEIGHT - fell * (EYE_HEIGHT - 0.42), from.z);
     camera.rotation.set(
-      0,
-      yawBetween(state.facingFrom, state.facing, walked),
-      0,
+      -fell * 0.5,
+      yawBetween(state.facingFrom, state.facing, walked) + look,
+      fell * 0.42,
       "YXZ",
     );
 
     flicker += dt;
     const wobble = 1 + Math.sin(flicker * 11) * 0.06 + Math.sin(flicker * 3.7) * 0.04;
     carried.position.copy(camera.position);
-    carried.intensity = (isArmed(state) ? 36 : 26) * wobble;
+    carried.intensity = (isArmed(state) ? 24 : 17) * wobble;
     carried.color.setHex(isArmed(state) ? 0xbcd4ff : 0xffc789);
 
     if (state.minotaur) {
@@ -467,7 +579,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       from.lerp(to, stalked);
       beast.position.set(from.x, 0, from.z);
       beast.lookAt(camera.position.x, 0, camera.position.z);
-      torch.intensity = 55 * wobble;
+      torch.intensity = 30 * wobble;
     } else {
       beast.visible = false;
       torch.intensity = 0;
@@ -481,6 +593,9 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     syncPickups(state);
     for (const p of live) {
       p.mesh.rotation.y += dt * 1.6;
+      // A little bob, so a pickup reads as an object placed there rather than
+      // a decal on the floor.
+      p.mesh.position.y = p.rest + Math.sin(flicker * 2.2 + p.cell.x + p.cell.y) * 0.08;
     }
 
     renderer.render(scene, camera);

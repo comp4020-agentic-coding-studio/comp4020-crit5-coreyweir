@@ -134,6 +134,63 @@ export function openRoom(width: number, height: number): Maze {
   return maze;
 }
 
+/**
+ * A maze drawn by hand.
+ *
+ * The layout is a `(2w+1) x (2h+1)` character grid: odd row/column pairs are
+ * cells, the characters between them are the walls, and `#` is solid. Written
+ * out it reads as the map it is, which is the whole reason level one is
+ * authored — its shape *is* the tutorial, and a tutorial you cannot see while
+ * editing is one you cannot tune.
+ */
+export function fromLayout(rows: readonly string[]): Maze {
+  const height = (rows.length - 1) / 2;
+  const width = (Math.max(...rows.map((r) => r.length)) - 1) / 2;
+  if (!Number.isInteger(width) || !Number.isInteger(height)) {
+    throw new Error("layout must be (2w+1) by (2h+1)");
+  }
+
+  const maze: Maze = { width, height, cells: new Uint8Array(width * height) };
+  const at = (row: number, col: number): string => rows[row]?.[col] ?? "#";
+  const solid = (x: number, y: number): boolean => at(2 * y + 1, 2 * x + 1) === "#";
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (solid(x, y)) continue;
+      if (x + 1 < width && !solid(x + 1, y) && at(2 * y + 1, 2 * x + 2) !== "#") {
+        carve(maze, { x, y }, 1);
+      }
+      if (y + 1 < height && !solid(x, y + 1) && at(2 * y + 2, 2 * x + 1) !== "#") {
+        carve(maze, { x, y }, 2);
+      }
+    }
+  }
+  return maze;
+}
+
+/**
+ * The shortest route from `a` to `b`, inclusive of both. Used to compose a
+ * level rather than scatter it: the sword that teaches you what a sword does
+ * has to be somewhere you were going to walk anyway.
+ */
+export function pathBetween(maze: Maze, a: Vec, b: Vec): Vec[] {
+  const dist = distancesFrom(maze, b);
+  if (!inBounds(maze, a) || dist[cellIndex(maze, a)] === -1) return [];
+
+  const path: Vec[] = [a];
+  let cursor = a;
+  while (!(cursor.x === b.x && cursor.y === b.y)) {
+    const d = dist[cellIndex(maze, cursor)];
+    const step = neighbours(maze, cursor).find(
+      (n) => dist[cellIndex(maze, n)] === d - 1,
+    );
+    if (!step) break;
+    path.push(step);
+    cursor = step;
+  }
+  return path;
+}
+
 /** How many cells you can see down `dir` from `from` before a wall stops you. */
 export function corridorLength(maze: Maze, from: Vec, dir: Dir): number {
   let cursor = from;
@@ -160,12 +217,19 @@ export function deadEnds(maze: Maze): Vec[] {
 /**
  * `braid` is the fraction of dead ends (0..1) reopened into loops. 0 leaves a
  * perfect maze, all dead ends, easiest to corner something in.
+ *
+ * `straightness` (0..1) is the chance the carve keeps going the way it was
+ * already going. An unbiased DFS turns at almost every cell, and in a game
+ * where turning is the one thing you cannot do while moving, that reads as
+ * constant fiddling rather than tension. Long runs are where the dread lives:
+ * somewhere to be chased down, somewhere to see a torch coming.
  */
 export function generateMaze(
   width: number,
   height: number,
   braid: number,
   rng: () => number,
+  straightness = 0,
 ): Maze {
   const maze: Maze = {
     width,
@@ -177,13 +241,13 @@ export function generateMaze(
   // about on a large maze.
   const visited = new Uint8Array(width * height);
   const start: Vec = { x: 0, y: 0 };
-  const stack: Vec[] = [start];
+  const stack: { at: Vec; came: Dir | null }[] = [{ at: start, came: null }];
   visited[cellIndex(maze, start)] = 1;
 
   while (stack.length > 0) {
     const current = stack[stack.length - 1];
     const options = DIRECTIONS.filter((dir) => {
-      const next = stepFrom(current, dir);
+      const next = stepFrom(current.at, dir);
       return inBounds(maze, next) && !visited[cellIndex(maze, next)];
     });
 
@@ -192,11 +256,15 @@ export function generateMaze(
       continue;
     }
 
-    const dir = options[Math.floor(rng() * options.length)];
-    carve(maze, current, dir);
-    const next = stepFrom(current, dir);
+    const ahead = current.came;
+    const dir =
+      ahead !== null && options.includes(ahead) && rng() < straightness
+        ? ahead
+        : options[Math.floor(rng() * options.length)];
+    carve(maze, current.at, dir);
+    const next = stepFrom(current.at, dir);
     visited[cellIndex(maze, next)] = 1;
-    stack.push(next);
+    stack.push({ at: next, came: dir });
   }
 
   if (braid > 0) {
