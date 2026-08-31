@@ -5,9 +5,9 @@
 
 import * as THREE from "three";
 
-import { type Vec, delta } from "./grid";
+import { type Dir, type Vec, delta } from "./grid";
 import { type Maze, isOpen } from "./maze";
-import { type GameState, isArmed } from "./game";
+import { type GameState, MINOTAUR_STEP_SECONDS, isArmed } from "./game";
 
 const CELL = 4;
 const WALL_HEIGHT = 3.6;
@@ -20,7 +20,11 @@ const EYE_HEIGHT = 1.65;
  * to a letterbox and you'd never see a minotaur in a side corridor. Hold the
  * horizontal angle steady instead and derive the vertical one.
  */
-const TARGET_HORIZONTAL_FOV = 88;
+// Widened from 88 after playtesting: at 88 you had to tap right-left-left to
+// check a side opening before stepping out, because a junction beside you sat
+// outside the frame. Peripheral vision is the information a first-person maze
+// runs on.
+const TARGET_HORIZONTAL_FOV = 104;
 
 function verticalFov(aspect: number): number {
   const h = (TARGET_HORIZONTAL_FOV * Math.PI) / 180;
@@ -28,7 +32,7 @@ function verticalFov(aspect: number): number {
   // Capped well below the 129 degrees portrait actually asks for: past about
   // 100 the floor and ceiling swallow the frame and the corridor you are
   // trying to read gets squeezed into a band.
-  return THREE.MathUtils.clamp((v * 180) / Math.PI, 45, 100);
+  return THREE.MathUtils.clamp((v * 180) / Math.PI, 45, 106);
 }
 
 function worldOf(cell: Vec): THREE.Vector3 {
@@ -374,13 +378,30 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     builtMaze = maze;
   }
 
-  // --- camera smoothing ----------------------------------------------------
-  // The grid is the truth; these ease toward it so movement doesn't teleport.
-  let camPos = new THREE.Vector3();
-  let camYaw = 0;
-  let beastPos = new THREE.Vector3();
-  let started = false;
+  // --- drawing the space between -------------------------------------------
+  // The grid is the truth. These read the move already in progress and draw it
+  // at constant velocity, so a step looks like walking rather than a lurch.
+  const from = new THREE.Vector3();
+  const to = new THREE.Vector3();
   let flicker = 0;
+
+  /** 0 at the moment a move begins, 1 when it lands. */
+  function progress(cooldown: number, duration: number): number {
+    if (duration <= 0) return 1;
+    return THREE.MathUtils.clamp(1 - cooldown / duration, 0, 1);
+  }
+
+  /**
+   * Yaw across a turn. A 180 is the awkward case: the shortest path is exactly
+   * pi and the sign is a coin toss, so it must be chosen rather than computed
+   * or the camera picks a different way round on identical inputs.
+   */
+  function yawBetween(a: Dir, b: Dir, t: number): number {
+    const start = yawOf(a);
+    let step = angleDelta(start, yawOf(b));
+    if (Math.abs(Math.abs(step) - Math.PI) < 1e-6) step = -Math.PI;
+    return start + step * t;
+  }
 
   /**
    * Sizing is checked every frame rather than driven by an event.
@@ -414,39 +435,37 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
 
     if (builtMaze !== state.maze) {
       buildMaze(state.maze);
-      started = false;
       live = [];
       for (const child of [...pickups.children]) pickups.remove(child);
     }
 
-    const target = worldOf(state.player);
-    const targetYaw = yawOf(state.facing);
+    // Position and heading both come from the move the rules already started.
+    const walked = progress(state.playerCooldown, state.moveFor);
+    from.copy(worldOf(state.playerFrom));
+    to.copy(worldOf(state.player));
+    from.lerp(to, walked);
 
-    if (!started) {
-      camPos = target.clone();
-      camYaw = targetYaw;
-      beastPos = state.minotaur ? worldOf(state.minotaur) : target.clone();
-      started = true;
-    }
-
-    // Exponential smoothing, framerate-independent.
-    const ease = 1 - Math.exp(-dt * 13);
-    camPos.lerp(target, ease);
-    camYaw += angleDelta(camYaw, targetYaw) * (1 - Math.exp(-dt * 11));
-
-    camera.position.set(camPos.x, EYE_HEIGHT, camPos.z);
-    camera.rotation.set(0, camYaw, 0, "YXZ");
+    camera.position.set(from.x, EYE_HEIGHT, from.z);
+    camera.rotation.set(
+      0,
+      yawBetween(state.facingFrom, state.facing, walked),
+      0,
+      "YXZ",
+    );
 
     flicker += dt;
     const wobble = 1 + Math.sin(flicker * 11) * 0.06 + Math.sin(flicker * 3.7) * 0.04;
-    carried.position.set(camPos.x, EYE_HEIGHT, camPos.z);
+    carried.position.copy(camera.position);
     carried.intensity = (isArmed(state) ? 36 : 26) * wobble;
     carried.color.setHex(isArmed(state) ? 0xbcd4ff : 0xffc789);
 
     if (state.minotaur) {
       beast.visible = true;
-      beastPos.lerp(worldOf(state.minotaur), 1 - Math.exp(-dt * 9));
-      beast.position.set(beastPos.x, 0, beastPos.z);
+      const stalked = progress(state.minotaurCooldown, MINOTAUR_STEP_SECONDS);
+      from.copy(worldOf(state.minotaurFrom ?? state.minotaur));
+      to.copy(worldOf(state.minotaur));
+      from.lerp(to, stalked);
+      beast.position.set(from.x, 0, from.z);
       beast.lookAt(camera.position.x, 0, camera.position.z);
       torch.intensity = 55 * wobble;
     } else {

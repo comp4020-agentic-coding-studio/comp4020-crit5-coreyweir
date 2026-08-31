@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EAST, WEST } from "./grid";
+import { EAST, WEST, opposite } from "./grid";
 import { type Maze, corridorLength } from "./maze";
 import {
   type GameState,
@@ -10,6 +10,8 @@ import {
   MAX_DELTA,
   MEAT_SCORE,
   SWORD_SECONDS,
+  TURN_AROUND_SECONDS,
+  TURN_SECONDS,
   createLevel,
   isArmed,
   playerStepSeconds,
@@ -234,5 +236,58 @@ describe("the first level", () => {
       const level = createLevel(1, seed);
       expect(level.exit).not.toEqual(level.player);
     }
+  });
+});
+
+describe("turning around", () => {
+  it("reverses you in one move", () => {
+    const start = createLevel(1, 5);
+    const spun = tick(start, 1 / 60, "turnAround");
+    expect(spun.facing).toBe(opposite(start.facing));
+  });
+
+  it("costs more than one turn and less than two, or nobody would use it", () => {
+    expect(TURN_AROUND_SECONDS).toBeGreaterThan(TURN_SECONDS);
+    expect(TURN_AROUND_SECONDS).toBeLessThan(TURN_SECONDS * 2);
+  });
+
+  it("lands on the same heading as two turns the same way", () => {
+    const start = createLevel(1, 9);
+    const spun = tick(start, 1 / 60, "turnAround");
+    // A single tick cannot span a turn: dt is clamped to MAX_DELTA, which is
+    // shorter than TURN_SECONDS. Wait the cooldown out the way the game does.
+    let twice = tick(start, 1 / 60, "turnRight");
+    while (twice.playerCooldown > 0) twice = tick(twice, MAX_DELTA, null);
+    twice = tick(twice, 1 / 60, "turnRight");
+    expect(spun.facing).toBe(twice.facing);
+  });
+});
+
+describe("the move in progress", () => {
+  // The renderer draws the space between cells from these three fields. If
+  // moveFor is ever zero mid-move it divides by nothing and the step snaps,
+  // which is the exact lurch this was written to remove.
+  it("records where a step came from, and how long it takes", () => {
+    const start = createLevel(1, 3);
+    const stepped = tick(start, 1 / 60, "forward");
+    expect(stepped.playerFrom).toEqual(start.player);
+    expect(stepped.player).not.toEqual(start.player);
+    expect(stepped.moveFor).toBeGreaterThan(0);
+    expect(stepped.playerCooldown).toBeCloseTo(stepped.moveFor, 5);
+  });
+
+  it("records where a turn came from too", () => {
+    const start = createLevel(1, 3);
+    const turned = tick(start, 1 / 60, "turnLeft");
+    expect(turned.facingFrom).toBe(start.facing);
+    expect(turned.facing).not.toBe(start.facing);
+    expect(turned.moveFor).toBeCloseTo(TURN_SECONDS, 5);
+  });
+
+  it("starts a level settled, so the first frame has nothing to interpolate", () => {
+    const start = createLevel(2, 11);
+    expect(start.playerFrom).toEqual(start.player);
+    expect(start.facingFrom).toBe(start.facing);
+    expect(start.moveFor).toBe(0);
   });
 });

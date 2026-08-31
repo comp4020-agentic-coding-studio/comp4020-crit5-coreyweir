@@ -9,6 +9,7 @@ import {
   type Vec,
   DIRECTIONS,
   NORTH,
+  opposite,
   sameCell,
   stepFrom,
   turnLeft,
@@ -26,13 +27,15 @@ import {
 } from "./maze";
 import { type MinotaurMode, decideMinotaur } from "./minotaur";
 
-export type Intent = "forward" | "turnLeft" | "turnRight";
+export type Intent = "forward" | "turnLeft" | "turnRight" | "turnAround";
 export type Status = "playing" | "levelComplete" | "gameOver" | "won";
 
 // Tuning. These are the numbers that get changed by playing, not by reasoning.
-export const BASE_STEP_SECONDS = 0.2;
-export const ARMED_STEP_SECONDS = 0.12;
-export const TURN_SECONDS = 0.14;
+export const BASE_STEP_SECONDS = 0.24;
+export const ARMED_STEP_SECONDS = 0.145;
+export const TURN_SECONDS = 0.16;
+/** Slower than a quarter turn but faster than two, so it stays worth using. */
+export const TURN_AROUND_SECONDS = 0.26;
 /**
  * Deliberately slower than your 0.2. At equal speed a pursuer that hunts on
  * sight is not a threat, it is an execution: you cannot break line of sight by
@@ -41,7 +44,7 @@ export const TURN_SECONDS = 0.14;
  * when you hesitate, turn badly, or get cornered — which is where the tension
  * should live.
  */
-export const MINOTAUR_STEP_SECONDS = 0.28;
+export const MINOTAUR_STEP_SECONDS = 0.335;
 export const SWORD_SECONDS = 8;
 export const FOOD_RESTORE = 0.3;
 export const MEAT_RESTORE = 0.55;
@@ -63,6 +66,18 @@ export interface GameState {
   readonly start: Vec;
   readonly player: Vec;
   readonly facing: Dir;
+  /**
+   * Where the move in progress started, and how long it takes.
+   *
+   * The rules are still discrete — you are always in exactly one cell facing
+   * exactly one way — but the renderer needs the departure point to draw the
+   * space between. Without it the only thing it can do is chase the destination
+   * with an easing curve, which accelerates and then crawls, and reads as a
+   * lurch on every single step.
+   */
+  readonly playerFrom: Vec;
+  readonly facingFrom: Dir;
+  readonly moveFor: number;
   readonly minotaur: Vec | null;
   readonly minotaurFrom: Vec | null;
   readonly minotaurLastSeen: Vec | null;
@@ -282,6 +297,9 @@ export function createLevel(
     start,
     player: start,
     facing: openingFacing(maze, start, exit),
+    playerFrom: start,
+    facingFrom: openingFacing(maze, start, exit),
+    moveFor: 0,
     minotaur,
     minotaurFrom: null,
     minotaurLastSeen: null,
@@ -324,6 +342,9 @@ function loseLife(state: GameState): GameState {
     armedFor: 0,
     player: state.start,
     facing: openingFacing(state.maze, state.start, state.exit),
+    playerFrom: state.start,
+    facingFrom: openingFacing(state.maze, state.start, state.exit),
+    moveFor: 0,
     playerCooldown: 0,
     minotaur: state.minotaur ? farthestFrom(state.maze, state.start) : null,
     minotaurFrom: null,
@@ -414,23 +435,39 @@ export function tick(
   const minotaurWas = next.minotaur;
 
   if (intent && next.playerCooldown <= 0) {
+    const began = { playerFrom: next.player, facingFrom: next.facing };
     if (intent === "turnLeft") {
       next = {
         ...next,
+        ...began,
         facing: turnLeft(next.facing),
         playerCooldown: TURN_SECONDS,
+        moveFor: TURN_SECONDS,
       };
     } else if (intent === "turnRight") {
       next = {
         ...next,
+        ...began,
         facing: turnRight(next.facing),
         playerCooldown: TURN_SECONDS,
+        moveFor: TURN_SECONDS,
       };
-    } else if (isOpen(next.maze, next.player, next.facing)) {
+    } else if (intent === "turnAround") {
       next = {
         ...next,
+        ...began,
+        facing: opposite(next.facing),
+        playerCooldown: TURN_AROUND_SECONDS,
+        moveFor: TURN_AROUND_SECONDS,
+      };
+    } else if (isOpen(next.maze, next.player, next.facing)) {
+      const seconds = playerStepSeconds(next);
+      next = {
+        ...next,
+        ...began,
         player: stepFrom(next.player, next.facing),
-        playerCooldown: playerStepSeconds(next),
+        playerCooldown: seconds,
+        moveFor: seconds,
       };
     }
   }

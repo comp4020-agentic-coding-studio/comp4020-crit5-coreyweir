@@ -19,6 +19,10 @@ const KEYS: Record<string, Intent> = {
   KeyA: "turnLeft",
   ArrowRight: "turnRight",
   KeyD: "turnRight",
+  // A nicety rather than a new ability: "dd" already did this, but reversing
+  // out of a dead end with something behind you is not a moment for two taps.
+  ArrowDown: "turnAround",
+  KeyS: "turnAround",
 };
 
 export function createInput(surface: HTMLElement): Input {
