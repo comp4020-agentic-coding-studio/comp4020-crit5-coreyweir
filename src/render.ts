@@ -80,13 +80,38 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   carried.position.y = EYE_HEIGHT;
   scene.add(carried);
 
+  /** Mottled noise, drawn once. Cheaper than shipping an image and it tiles. */
+  function stoneTexture(base: string, speckle: string): THREE.CanvasTexture {
+    const size = 128;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.fillStyle = base;
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = speckle;
+      for (let i = 0; i < 2600; i += 1) {
+        ctx.globalAlpha = 0.04 + Math.random() * 0.14;
+        const r = 1 + Math.random() * 3;
+        ctx.fillRect(Math.random() * size, Math.random() * size, r, r);
+      }
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+  }
+
   const stone = new THREE.MeshStandardMaterial({
-    color: 0x8d8479,
+    map: stoneTexture("#8d8479", "#3a3129"),
+    color: 0xffffff,
     roughness: 0.95,
     metalness: 0,
   });
   const floorMat = new THREE.MeshStandardMaterial({
-    color: 0x4c443a,
+    map: stoneTexture("#4c443a", "#221c16"),
     roughness: 1,
   });
 
@@ -275,13 +300,21 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       );
       walls?.setMatrixAt(i, m);
     });
+    const tint = new THREE.Color();
+    for (let i = 0; i < segments.length; i += 1) {
+      const v = 0.82 + Math.random() * 0.3;
+      tint.setRGB(v, v * 0.97, v * 0.92);
+      walls.setColorAt(i, tint);
+    }
     walls.instanceMatrix.needsUpdate = true;
+    if (walls.instanceColor) walls.instanceColor.needsUpdate = true;
     level.add(walls);
 
     const w = maze.width * CELL;
     const h = maze.height * CELL;
     const centre = new THREE.Vector3((w - CELL) / 2, 0, (h - CELL) / 2);
 
+    floorMat.map?.repeat.set(maze.width, maze.height);
     floor = new THREE.Mesh(new THREE.PlaneGeometry(w + CELL, h + CELL), floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(centre.x, 0, centre.z);

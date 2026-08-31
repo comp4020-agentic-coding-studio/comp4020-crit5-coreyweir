@@ -125,13 +125,23 @@ export function levelConfig(level: number): LevelConfig {
  * rectangle, which invites nothing. Looking down a corridor with somewhere to
  * go in it is the whole of the game's first instruction, and it isn't words.
  */
-export function openingFacing(maze: Maze, from: Vec): Dir {
+export function openingFacing(maze: Maze, from: Vec, toward?: Vec): Dir {
   let best: Dir = NORTH;
   let bestLength = -1;
+  let bestPull = -Infinity;
   for (const dir of DIRECTIONS) {
     const length = corridorLength(maze, from, dir);
-    if (length > bestLength) {
+    if (length <= 0) continue;
+    // Among equally long corridors, look the way the exit is: in an open room
+    // that is the difference between the way out being in shot and being
+    // somewhere behind your shoulder.
+    const step = stepFrom(from, dir);
+    const pull = toward
+      ? -(Math.abs(step.x - toward.x) + Math.abs(step.y - toward.y))
+      : 0;
+    if (length > bestLength || (length === bestLength && pull > bestPull)) {
       bestLength = length;
+      bestPull = pull;
       best = dir;
     }
   }
@@ -219,7 +229,7 @@ export function createLevel(
     maze,
     start,
     player: start,
-    facing: openingFacing(maze, start),
+    facing: openingFacing(maze, start, exit),
     minotaur,
     minotaurFrom: null,
     minotaurLastSeen: null,
@@ -261,7 +271,7 @@ function loseLife(state: GameState): GameState {
     hunger: 1,
     armedFor: 0,
     player: state.start,
-    facing: openingFacing(state.maze, state.start),
+    facing: openingFacing(state.maze, state.start, state.exit),
     playerCooldown: 0,
     minotaur: state.minotaur ? farthestFrom(state.maze, state.start) : null,
     minotaurFrom: null,
