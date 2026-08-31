@@ -51,7 +51,8 @@ interface Pickup {
 }
 
 export interface Renderer {
-  resize(width: number, height: number): void;
+  /** Idempotent; called every frame. */
+  resize(): void;
   update(state: GameState, dt: number): void;
   dispose(): void;
 }
@@ -374,7 +375,25 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   let started = false;
   let flicker = 0;
 
-  function resize(width: number, height: number): void {
+  /**
+   * Sizing is checked every frame rather than driven by an event.
+   *
+   * A one-shot resize at startup rendered a black screen roughly three times
+   * in four at 390x844 and never once at 1920x1080 — the canvas has no layout
+   * yet when the module runs, so the drawing buffer got fixed at 1x1 and
+   * whether anything corrected it was a race. Comparing against the live box
+   * each frame costs two integer compares and cannot lose that race.
+   */
+  const measured = new THREE.Vector2();
+
+  function resize(): void {
+    // innerWidth/innerHeight as the floor: the canvas is position:fixed,
+    // inset:0, so it IS the viewport, and those are readable before layout.
+    const width = Math.max(1, canvas.clientWidth || window.innerWidth);
+    const height = Math.max(1, canvas.clientHeight || window.innerHeight);
+    renderer.getSize(measured);
+    if (measured.x === width && measured.y === height) return;
+
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.fov = verticalFov(camera.aspect);
@@ -384,6 +403,8 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   }
 
   function update(state: GameState, dt: number): void {
+    resize();
+
     if (builtMaze !== state.maze) {
       buildMaze(state.maze);
       started = false;

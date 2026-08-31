@@ -19,12 +19,8 @@ let state = createLevel(1, seed());
 let hold = 0;
 let last = performance.now();
 
-// The device toolbar toggling counts as a resize, and it is on the marking
-// route, so watch the element rather than just the window.
-new ResizeObserver(() => {
-  renderer.resize(canvas.clientWidth || 1, canvas.clientHeight || 1);
-}).observe(canvas);
-renderer.resize(canvas.clientWidth || 1, canvas.clientHeight || 1);
+// The renderer re-measures itself every frame, so rotating the phone or
+// toggling the device toolbar needs no event plumbing here.
 
 function settle(): void {
   hud.clearFlash();
