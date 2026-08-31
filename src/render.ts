@@ -76,7 +76,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
 
   // Your own light, kept short-range: enough to read the walls beside you,
   // not enough to floodlight the maze.
-  const carried = new THREE.PointLight(0xffc789, 34, 15, 1.7);
+  const carried = new THREE.PointLight(0xffc789, 26, 14, 1.8);
   carried.position.y = EYE_HEIGHT;
   scene.add(carried);
 
@@ -392,7 +392,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     flicker += dt;
     const wobble = 1 + Math.sin(flicker * 11) * 0.06 + Math.sin(flicker * 3.7) * 0.04;
     carried.position.set(camPos.x, EYE_HEIGHT, camPos.z);
-    carried.intensity = (isArmed(state) ? 46 : 34) * wobble;
+    carried.intensity = (isArmed(state) ? 36 : 26) * wobble;
     carried.color.setHex(isArmed(state) ? 0xbcd4ff : 0xffc789);
 
     if (state.minotaur) {

@@ -196,11 +196,23 @@ export function createLevel(
     ? openRoom(config.width, config.height)
     : generateMaze(config.width, config.height, config.braid, rng);
 
-  const start: Vec = { x: 0, y: 0 };
-  const exit = farthestFrom(maze, start);
+  // Level 1 is authored, not generated. A tutorial made of level design has to
+  // be composed: the way out dead ahead so the goal needs no stating, and the
+  // food deliberately off that line so the first thing you learn is that
+  // stepping aside is worth something.
+  const middle = Math.floor(config.height / 2);
+  const start: Vec = config.openRoom ? { x: 0, y: middle } : { x: 0, y: 0 };
+  const exit = config.openRoom
+    ? { x: config.width - 1, y: middle }
+    : farthestFrom(maze, start);
   const taken: Vec[] = [start, exit];
 
-  const food = pickCells(maze, config.food, taken, rng);
+  const food = config.openRoom
+    ? [
+        { x: 2, y: middle - 2 },
+        { x: 2, y: middle + 2 },
+      ].filter((c) => c.y >= 0 && c.y < config.height)
+    : pickCells(maze, config.food, taken, rng);
   taken.push(...food);
   const swords = pickCells(maze, config.swords, taken, rng);
   taken.push(...swords);
