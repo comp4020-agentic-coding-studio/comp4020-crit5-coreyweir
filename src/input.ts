@@ -71,10 +71,12 @@ export function createInput(surface: HTMLElement): Input {
     event.preventDefault();
     if (event.repeat) return;
     if (isTurn(intent)) queue(intent);
-    // Turning round is what you do with something behind you, and standing
-    // still to admire it afterwards is not the next thing you wanted. Holding
-    // it spins you once and then runs.
-    if (intent === "forward" || intent === "turnAround") treading.add(event.code);
+    // Holding S used to spin you and then run, on the theory that turning round
+    // is what you do with something behind you. In the hand it was clunky: one
+    // key doing two things means you cannot turn round without also committing
+    // to a step, and the 180 is most useful exactly when you want to look
+    // before you move. One key, one job.
+    else treading.add(event.code);
   };
 
   const onKeyUp = (event: KeyboardEvent): void => {

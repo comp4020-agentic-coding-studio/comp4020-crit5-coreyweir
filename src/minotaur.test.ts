@@ -21,7 +21,7 @@ describe("the minotaur", () => {
     const decision = decideMinotaur(
       {
         maze,
-        at: { x: 4, y: 0 },
+        at: { x: 3, y: 0 },
         cameFrom: null,
         player: { x: 0, y: 0 },
         playerArmed: false,
@@ -31,7 +31,48 @@ describe("the minotaur", () => {
       rng,
     );
     expect(decision.mode).toBe("hunting");
-    expect(decision.moveTo).toEqual({ x: 3, y: 0 });
+    expect(decision.moveTo).toEqual({ x: 2, y: 0 });
+  });
+
+  // It carries one torch. Biasing generation toward long straights quietly
+  // turned an unbounded sightline into a firing line down half the level, and
+  // that is what made the corridors feel like a punishment rather than a place
+  // to breathe.
+  it("cannot pick you out from the far end of a long corridor", () => {
+    const maze = corridor(9);
+    const decision = decideMinotaur(
+      {
+        maze,
+        at: { x: 8, y: 0 },
+        cameFrom: null,
+        player: { x: 0, y: 0 },
+        playerArmed: false,
+        lastSeen: null,
+        memory: 0,
+      },
+      rng,
+    );
+    expect(decision.mode).toBe("patrolling");
+  });
+
+  // Two adjacent open cells always have line of sight, so a minotaur beside
+  // you has already seen you. There is no such thing as blundering into
+  // somebody in this maze, and a guard against it would be unreachable code.
+  it("is already hunting by the time it is next to you", () => {
+    const maze = corridor(3);
+    const decision = decideMinotaur(
+      {
+        maze,
+        at: { x: 1, y: 0 },
+        cameFrom: { x: 0, y: 0 },
+        player: { x: 2, y: 0 },
+        playerArmed: false,
+        lastSeen: null,
+        memory: 0,
+      },
+      rng,
+    );
+    expect(decision.mode).toBe("hunting");
   });
 
   // Fleeing is what the sword buys you, and it is why an ambush is worth

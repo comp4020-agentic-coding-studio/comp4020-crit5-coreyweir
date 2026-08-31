@@ -50,15 +50,22 @@ export const TURN_AROUND_SECONDS = 0.26;
  * level two. Slower means it is escapable in a straight line and dangerous
  * when you hesitate, turn badly, or get cornered — which is where the tension
  * should live.
+ *
+ * Slowed again, twice, after playing: 0.335 to 0.44 to 0.62, against a base
+ * player step of 0.24. That is not a fair fight and it is not meant to be. The
+ * controls are deliberately clunky — four directions, and turning costs you a
+ * beat you cannot take back — so a pursuer near your own speed leaves no room
+ * to actually use them, and every sighting resolves before you have finished
+ * deciding. The tax has to be payable.
  */
-export const MINOTAUR_STEP_SECONDS = 0.4;
+export const MINOTAUR_STEP_SECONDS = 0.62;
 export const SWORD_SECONDS = 8;
 export const FOOD_RESTORE = 0.3;
 export const MEAT_RESTORE = 0.55;
 export const FOOD_SCORE = 10;
 export const MEAT_SCORE = 50;
 export const LEVEL_SCORE = 25;
-export const STARTING_LIVES = 3;
+export const STARTING_LIVES = 5;
 export const LEVEL_COUNT = 6;
 /** Long enough to read what killed you, short enough not to be a punishment. */
 export const DYING_SECONDS = 1.5;
@@ -192,7 +199,7 @@ export function levelConfig(level: number): LevelConfig {
   }
 
   // Room to manoeuvre: a 5x5 with something hunting you is a cupboard.
-  const size = Math.min(5 + (level - 2) * 2, 13);
+  const size = Math.min(5 + (level - 2) * 2, 11);
   return {
     width: size,
     height: size,
@@ -205,8 +212,8 @@ export function levelConfig(level: number): LevelConfig {
     // Turning is the one thing you cannot do while moving, so a maze that
     // turns every cell is a maze you spend fiddling instead of dreading.
     straightness: 0.78,
-    hungerRate: 0.014 + (level - 3) * 0.003,
-    food: 2 + level,
+    hungerRate: 0.013 + (level - 3) * 0.0015,
+    food: 3 + level,
     swords: 1 + Math.floor((level - 1) / 3),
     minotaur: true,
   };

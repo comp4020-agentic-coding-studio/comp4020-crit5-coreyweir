@@ -20,7 +20,19 @@ import {
 export type MinotaurMode = "hunting" | "fleeing" | "patrolling";
 
 /** How many steps it keeps heading for where it last saw you. */
-export const MEMORY_STEPS = 6;
+export const MEMORY_STEPS = 4;
+
+/**
+ * How far down a corridor it can pick you out. Torchlight, not radar.
+ *
+ * This was unbounded, which was survivable while the mazes were knotty and
+ * became brutal the moment generation was biased toward long straights: a
+ * corridor eight cells long meant it acquired you from across the level and
+ * hunted the whole way. Capping the range is what makes a long corridor a
+ * place to breathe rather than a firing line, and it is the honest reading of
+ * a beast carrying one torch in the dark.
+ */
+export const SIGHT_CELLS = 3;
 
 export interface MinotaurView {
   readonly maze: Maze;
@@ -84,6 +96,12 @@ function patrol(
     ? open.filter((n) => !sameCell(n, cameFrom))
     : open;
   const choices = forward.length > 0 ? forward : open;
+  // No "don't walk into the player" guard here, and that is deliberate: two
+  // adjacent open cells always have line of sight, so a minotaur that is next
+  // to you has by definition already seen you and is hunting, not patrolling.
+  // A guard was written, appeared to change nothing across three runs of the
+  // pacing sim, and turned out to be unreachable. Worth stating so it does not
+  // get re-added.
   return choices[Math.floor(rng() * choices.length)];
 }
 
@@ -92,7 +110,9 @@ export function decideMinotaur(
   rng: () => number,
 ): MinotaurDecision {
   const { maze, at, cameFrom, player, playerArmed, lastSeen, memory } = view;
-  const sees = hasLineOfSight(maze, at, player);
+  const sees =
+    Math.abs(at.x - player.x) + Math.abs(at.y - player.y) <= SIGHT_CELLS &&
+    hasLineOfSight(maze, at, player);
 
   if (sees && playerArmed) {
     return {

@@ -1,27 +1,37 @@
-// The thread you leave behind you.
+// The plan view.
 //
 // Playing it through, the thing that made the game feel unfair was not the
 // minotaur — it was reversing into a dead end you had already been down and
 // had no way to remember. That is not tension, it is bookkeeping the player is
 // being asked to do in their head.
 //
-// So: a map of *what you have seen*, and nothing else. The maze ahead is still
-// dark, which is the whole navigation game and the reason this is not Pac-Man
-// — you never get full map knowledge, you accumulate it. The exit is on it
-// from the first frame because the beacon already tells you that through the
-// walls; the map just says it in plan view.
+// It shipped first as fog of war, showing only what you had seen. That was the
+// prettier idea and it was not enough: cornering yourself is something you do
+// in the corridor you have *not* been down, so a map that only remembers is a
+// map that arrives one death too late. It now draws the whole layout, with the
+// cells you have actually walked or looked down picked out brighter — the
+// thread is still there, it just no longer decides whether you can play.
+//
+// What it deliberately does not give you is the contents. No food, no swords,
+// and the minotaur only when it already has line of sight to you — so the map
+// answers "am I seen" rather than "where is it", and finding things is still
+// done with your eyes. That, not the layout, is what keeps this from being
+// Pac-Man: full map knowledge there is total, and here it is only the walls.
 
 import { type GameState } from "./game";
-import { cellIndex, isOpen } from "./maze";
+import { cellIndex, hasLineOfSight, isOpen } from "./maze";
 
 export interface Minimap {
   draw(state: GameState): void;
 }
 
-const SEEN = "rgba(232, 226, 214, 0.10)";
-const WALL = "rgba(232, 226, 214, 0.5)";
+const KNOWN = "rgba(232, 226, 214, 0.045)";
+const SEEN = "rgba(232, 226, 214, 0.16)";
+const WALL = "rgba(232, 226, 214, 0.26)";
+const WALL_SEEN = "rgba(232, 226, 214, 0.62)";
 const YOU = "#ff9a3c";
 const OUT = "#5fe39a";
+const BEAST = "#ff5340";
 
 export function createMinimap(canvas: HTMLCanvasElement): Minimap {
   const ctx = canvas.getContext("2d");
@@ -48,16 +58,14 @@ export function createMinimap(canvas: HTMLCanvasElement): Minimap {
 
       for (let y = 0; y < maze.height; y += 1) {
         for (let x = 0; x < maze.width; x += 1) {
-          if (!state.seen[cellIndex(maze, { x, y })]) continue;
+          const seen = state.seen[cellIndex(maze, { x, y })] === 1;
           const left = ox + x * size;
           const top = oy + y * size;
 
-          ctx.fillStyle = SEEN;
+          ctx.fillStyle = seen ? SEEN : KNOWN;
           ctx.fillRect(left, top, size, size);
 
-          // Only the walls of cells you have seen get drawn, so the frontier
-          // of the map is a ragged edge rather than a rectangle.
-          ctx.strokeStyle = WALL;
+          ctx.strokeStyle = seen ? WALL_SEEN : WALL;
           ctx.beginPath();
           if (!isOpen(maze, { x, y }, 0)) {
             ctx.moveTo(left, top);
@@ -77,6 +85,21 @@ export function createMinimap(canvas: HTMLCanvasElement): Minimap {
           }
           ctx.stroke();
         }
+      }
+
+      // It appears exactly when it can see you, which makes the map a warning
+      // rather than a tracker: the thing it tells you is that you are exposed.
+      if (state.minotaur && hasLineOfSight(maze, state.player, state.minotaur)) {
+        ctx.fillStyle = BEAST;
+        ctx.beginPath();
+        ctx.arc(
+          ox + state.minotaur.x * size + size / 2,
+          oy + state.minotaur.y * size + size / 2,
+          size * 0.3,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
       }
 
       ctx.fillStyle = OUT;

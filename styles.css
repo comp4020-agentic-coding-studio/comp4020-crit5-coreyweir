@@ -206,14 +206,29 @@ body {
 }
 
 .score {
-  display: block;
-  min-width: 3ch;
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.45rem;
   text-align: right;
   font-variant-numeric: tabular-nums;
   font-size: clamp(1.6rem, 5vw, 2.3rem);
   line-height: 1;
   letter-spacing: 0.04em;
   opacity: 0.88;
+}
+
+/* A label, not an instruction: it names the number rather than telling anyone
+   how to play. The floating amount below still does the teaching. */
+.score__label {
+  font-size: 0.44em;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+#score {
+  min-width: 3ch;
 }
 
 /* What the number in the corner is *for*, said in the only vocabulary the
